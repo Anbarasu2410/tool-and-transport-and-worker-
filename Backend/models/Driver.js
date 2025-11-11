@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const driverSchema = new mongoose.Schema({
   id: {
@@ -8,37 +8,45 @@ const driverSchema = new mongoose.Schema({
   },
   companyId: {
     type: Number,
-    required: true
+    required: true,
+    index: true
   },
   employeeId: {
     type: Number,
-    required: true
-    // REMOVED: unique: true ← This was causing the error
+    required: true,
+    index: true
   },
   employeeName: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
   employeeCode: {
-    type: String
+    type: String,
+    trim: true
   },
   jobTitle: {
-    type: String
+    type: String,
+    trim: true
   },
   licenseNo: {
     type: String,
-    required: true
+    required: true,
+    trim: true,
+    index: true
   },
   licenseExpiry: {
     type: Date
   },
   vehicleId: {
-    type: Number
+    type: Number,
+    index: true
   },
   status: {
     type: String,
     enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'],
-    default: 'ACTIVE'
+    default: 'ACTIVE',
+    index: true
   },
   createdAt: {
     type: Date,
@@ -50,4 +58,7 @@ const driverSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Driver', driverSchema);
+// Add only essential indexes
+driverSchema.index({ companyId: 1, status: 1 });
+
+export default mongoose.model('Driver', driverSchema);

@@ -51,19 +51,63 @@ axiosInstance.interceptors.response.use(
   }
 );
 
-export const apiService = {
-  // ========== EMAIL NOTIFICATION ENDPOINTS ==========
-  sendFleetTaskNotification: async (emailData) => {
+const apiService = {
+  // ========== WORKER EMPLOYEES ENDPOINT ==========
+  getWorkerEmployees: async (companyId, search = '') => {
     try {
-      console.log('📧 Sending fleet task notification:', JSON.stringify(emailData, null, 2));
-      const response = await axiosInstance.post('/email/send-fleet-task-notification', emailData);
-      console.log('✅ Email notification sent successfully');
+      console.log('🔍 Fetching worker employees for company:', companyId);
+      
+      const response = await axiosInstance.get('/employees/workers', {
+        params: {
+          companyId,
+          search,
+          role: 'worker'
+        }
+      });
+      
+      console.log('✅ Worker employees response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Error sending email notification:', error.response?.data);
-      const errorMessage = error.response?.data?.message || 'Failed to send email notification';
-      // Return success: false instead of throwing error to not block main operation
-      return { success: false, error: errorMessage };
+      console.error('❌ Error fetching worker employees:', {
+        status: error.response?.status,
+        message: error.response?.data?.message || error.message,
+        url: error.config?.url
+      });
+      
+      // If the specific endpoint fails, try fallback to regular employees
+      if (error.response?.status === 404) {
+        console.log('🔄 Trying fallback: using regular employees endpoint');
+        try {
+          const fallbackResponse = await axiosInstance.get(`/employees/company/${companyId}`);
+          if (fallbackResponse.data && fallbackResponse.data.success) {
+            // Filter only active employees for fallback
+            const activeEmployees = (fallbackResponse.data.data || []).filter(
+              emp => emp.status === 'ACTIVE'
+            );
+            return {
+              success: true,
+              data: activeEmployees
+            };
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback also failed:', fallbackError);
+        }
+      }
+      
+      throw error;
+    }
+  },
+
+  // ========== EMAIL NOTIFICATION ENDPOINTS ==========
+  sendFleetTaskNotification: async (notificationData) => {
+    try {
+      console.log('📧 Sending fleet task notification:', notificationData);
+      const response = await axiosInstance.post('/notifications/fleet-task', notificationData);
+      console.log('✅ Notification sent successfully');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error sending notification:', error.response?.data || error.message);
+      throw error;
     }
   },
 
@@ -133,7 +177,6 @@ export const apiService = {
     try {
       console.log('🔍 Fetching vehicles for company ID:', companyId);
       
-      // Try multiple endpoint patterns
       let response;
       
       // First try the numeric companyId (like 1, 2, 3)
@@ -141,7 +184,7 @@ export const apiService = {
         response = await axiosInstance.get(`/fleet-vehicles/company/${companyId}`);
       } 
       // If it's an ObjectId, try that endpoint
-      else if (companyId.length === 24) { // MongoDB ObjectId is 24 chars
+      else if (companyId.length === 24) {
         response = await axiosInstance.get(`/fleet-vehicles/company/object/${companyId}`);
       }
       // Fallback to query parameter
@@ -154,14 +197,12 @@ export const apiService = {
     } catch (error) {
       console.error('❌ Error fetching vehicles by company:', error.response?.data || error.message);
       
-      // If specific company endpoint fails, try getting all vehicles and filter
       try {
         console.log('🔄 Trying fallback: get all vehicles');
         const allResponse = await axiosInstance.get('/fleet-vehicles');
         const allVehicles = Array.isArray(allResponse.data) ? allResponse.data : 
                            allResponse.data.data || allResponse.data.vehicles || [];
         
-        // Filter vehicles by companyId (handle both numeric and string comparison)
         const filteredVehicles = allVehicles.filter(vehicle => {
           const vehicleCompanyId = vehicle.companyId || vehicle.company;
           return vehicleCompanyId == companyId || 
@@ -184,7 +225,6 @@ export const apiService = {
       const response = await axiosInstance.get('/companies');
       console.log('🏢 Raw companies response:', response.data);
       
-      // Debug the response structure
       if (response.data) {
         console.log('📊 Companies response structure:', {
           hasData: !!response.data.data,
@@ -340,7 +380,6 @@ export const apiService = {
       const response = await axiosInstance.get('/employees');
       console.log('👥 Raw employees response:', response.data);
       
-      // Debug the response structure
       if (response.data) {
         console.log('📊 Employees response structure:', {
           hasData: !!response.data.data,
@@ -362,7 +401,6 @@ export const apiService = {
       console.log('🔍 Calling getEmployeesByCompany with companyId:', companyId);
       const response = await axiosInstance.get(`/employees/company/${companyId}`);
       
-      // Enhanced debugging for employee data
       console.log('👥 Raw employees by company response:', response.data);
       
       if (response.data) {
@@ -374,19 +412,16 @@ export const apiService = {
           firstItemKeys: employeesData[0] ? Object.keys(employeesData[0]) : 'No data',
           firstItemValues: employeesData[0] || 'No data',
           hasEmployeeCode: employeesData[0]?.employeeCode ? 'Yes' : 'No',
-          hasDesignation: employeesData[0]?.designation ? 'Yes' : 'No',
-          hasPassengerFields: employeesData[0]?.passengerId ? 'Yes (PASSENGER!)' : 'No'
+          hasJobTitle: employeesData[0]?.jobTitle ? 'Yes' : 'No'
         });
 
-        // Log each employee for detailed inspection
         employeesData.forEach((emp, index) => {
           console.log(`👤 Employee ${index + 1}:`, {
             id: emp.id,
-            name: emp.name || emp.fullName,
+            name: emp.fullName,
             employeeCode: emp.employeeCode,
-            designation: emp.designation,
-            isPassenger: !!(emp.passengerId || emp.pickupLocation || emp.dropLocation),
-            allFields: Object.keys(emp)
+            jobTitle: emp.jobTitle,
+            status: emp.status
           });
         });
       }
@@ -399,11 +434,7 @@ export const apiService = {
         url: error.config?.url
       });
       
-      // Check if it's a 404 or wrong endpoint
       if (error.response?.status === 404) {
-        console.error('⚠️ Endpoint not found. Check if /employees/company/:companyId exists');
-        
-        // Fallback: Try to get all employees and filter by company
         console.log('🔄 Trying fallback: fetching all employees and filtering...');
         try {
           const allEmployeesResponse = await axiosInstance.get('/employees');
@@ -415,7 +446,6 @@ export const apiService = {
             allEmployees = allEmployeesResponse.data;
           }
           
-          // Filter employees by companyId
           const filteredEmployees = allEmployees.filter(emp => 
             emp.companyId === parseInt(companyId) || emp.companyId == companyId
           );
@@ -436,7 +466,6 @@ export const apiService = {
     }
   },
 
-  // ========== EMPLOYEE MANAGEMENT ENDPOINTS ==========
   createEmployee: async (employeeData) => {
     try {
       console.log('📤 Creating employee with data:', JSON.stringify(employeeData, null, 2));

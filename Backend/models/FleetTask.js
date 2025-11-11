@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const fleetTaskSchema = new mongoose.Schema({
   id: {
@@ -8,60 +8,62 @@ const fleetTaskSchema = new mongoose.Schema({
   },
   companyId: {
     type: Number,
-    required: true
+    required: true,
+    index: true
   },
   projectId: {
-    type: Number
+    type: Number,
+    index: true
   },
   driverId: {
-    type: Number
+    type: Number,
+    index: true
   },
   vehicleId: {
     type: Number,
-    required: true
+    required: true,
+    index: true
   },
   taskDate: {
     type: Date,
-    required: true
+    required: true,
+    index: true
   },
   plannedPickupTime: {
-    type: Date
+    type: Date,
+    index: true
   },
   plannedDropTime: {
-    type: Date
+    type: Date,
+    index: true
   },
-  // CHANGED: pickupLocation now accepts strings
   pickupLocation: {
-    type: String,  // Changed from geospatial object to String
-    trim: true,
-    default: ''
+    type: String,
+    trim: true
   },
   pickupAddress: {
     type: String,
-    trim: true,
-    default: ''
+    trim: true
   },
-  // CHANGED: dropLocation now accepts strings
   dropLocation: {
-    type: String,  // Changed from geospatial object to String
-    trim: true,
-    default: ''
+    type: String,
+    trim: true
   },
   dropAddress: {
     type: String,
-    trim: true,
-    default: ''
+    trim: true
   },
   expectedPassengers: {
     type: Number,
-    min: 0,
     default: 0
   },
   actualStartTime: {
-    type: Date
+    type: Date,
+    index: true
   },
   actualEndTime: {
-    type: Date
+    type: Date,
+    index: true
   },
   routeLog: {
     type: Array,
@@ -70,33 +72,34 @@ const fleetTaskSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['PLANNED', 'ONGOING', 'COMPLETED', 'CANCELLED'],
-    default: 'PLANNED'
+    default: 'PLANNED',
+    index: true
   },
   notes: {
     type: String,
     trim: true
   },
   createdBy: {
-    type: Number
+    type: Number,
+    index: true
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   updatedAt: {
     type: Date,
     default: Date.now
   }
+}, {
+  collection: 'fleetTasks',
+  timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' }
 });
 
-// REMOVED: Geospatial indexes since we're using strings now
-// fleetTaskSchema.index({ pickupLocation: '2dsphere' });
-// fleetTaskSchema.index({ dropLocation: '2dsphere' });
+// Add essential indexes
+fleetTaskSchema.index({ companyId: 1, taskDate: -1 });
+fleetTaskSchema.index({ vehicleId: 1, taskDate: -1 });
+fleetTaskSchema.index({ status: 1, taskDate: -1 });
 
-// Update updatedAt before saving
-fleetTaskSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
-
-module.exports = mongoose.model('FleetTask', fleetTaskSchema, 'fleetTasks');
+export default mongoose.model('FleetTask', fleetTaskSchema);

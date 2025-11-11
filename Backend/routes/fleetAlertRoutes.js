@@ -1,9 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const {
+import express from 'express';
+import {
   createFleetAlert
-} = require('../controllers/fleetAlertController');
+} from '../controllers/fleetAlertController.js';
+
+const router = express.Router();
 
 router.post('/', createFleetAlert);
 
-module.exports = router;
+export default router;

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const fleetTaskPassengerSchema = new mongoose.Schema({
   id: {
@@ -9,28 +9,31 @@ const fleetTaskPassengerSchema = new mongoose.Schema({
   companyId: {
     type: Number,
     required: true,
-    ref: 'Company'
+    index: true
   },
   fleetTaskId: {
     type: Number,
     required: true,
-    ref: 'FleetTask'
+    index: true
   },
   workerEmployeeId: {
     type: Number,
     required: true,
-   // ref: 'Employee'
+    index: true
   },
   pickupConfirmedAt: {
-    type: Date
+    type: Date,
+    index: true
   },
   dropConfirmedAt: {
-    type: Date
+    type: Date,
+    index: true
   },
   status: {
     type: String,
     enum: ['PLANNED', 'PICKED', 'DROPPED', 'ABSENT'],
-    default: 'PLANNED'
+    default: 'PLANNED',
+    index: true
   },
   notes: {
     type: String,
@@ -38,8 +41,15 @@ const fleetTaskPassengerSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   }
+}, {
+  collection: 'fleetTaskPassengers'
 });
 
-module.exports = mongoose.model('FleetTaskPassenger', fleetTaskPassengerSchema, 'fleetTaskPassengers');
+// Add essential indexes
+fleetTaskPassengerSchema.index({ fleetTaskId: 1, status: 1 });
+fleetTaskPassengerSchema.index({ workerEmployeeId: 1, createdAt: -1 });
+
+export default mongoose.model('FleetTaskPassenger', fleetTaskPassengerSchema);

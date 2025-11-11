@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const fleetVehicleSchema = new mongoose.Schema({
   id: {
@@ -9,17 +9,19 @@ const fleetVehicleSchema = new mongoose.Schema({
   companyId: {
     type: Number,
     required: true,
-    ref: 'Company'
+    index: true
   },
   vehicleCode: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    index: true
   },
   registrationNo: {
     type: String,
     unique: true,
-    trim: true
+    trim: true,
+    index: true
   },
   vehicleType: {
     type: String,
@@ -32,13 +34,16 @@ const fleetVehicleSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['AVAILABLE', 'IN_SERVICE', 'MAINTENANCE'],
-    default: 'AVAILABLE'
+    default: 'AVAILABLE',
+    index: true
   },
   insuranceExpiry: {
-    type: Date
+    type: Date,
+    index: true
   },
   lastServiceDate: {
-    type: Date
+    type: Date,
+    index: true
   },
   odometer: {
     type: Number,
@@ -50,18 +55,20 @@ const fleetVehicleSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   updatedAt: {
     type: Date,
     default: Date.now
   }
+}, {
+  collection: 'fleetVehicles',
+  timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' }
 });
 
-// Update updatedAt before saving
-fleetVehicleSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
+// Add essential indexes
+fleetVehicleSchema.index({ companyId: 1, status: 1 });
+fleetVehicleSchema.index({ status: 1, insuranceExpiry: 1 });
 
-module.exports = mongoose.model('FleetVehicle', fleetVehicleSchema, 'fleetVehicles');
+export default mongoose.model('FleetVehicle', fleetVehicleSchema);

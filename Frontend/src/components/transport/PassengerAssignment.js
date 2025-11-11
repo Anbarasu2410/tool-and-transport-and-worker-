@@ -1,80 +1,101 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Button, Input, Table, Checkbox, Row, Col } from 'antd';
-import { CheckOutlined, CloseOutlined, SearchOutlined, UserOutlined } from '@ant-design/icons';
+import { 
+  Form, 
+  Button, 
+  Input, 
+  Table, 
+  Checkbox, 
+  Row, 
+  Col, 
+  message, 
+  Spin, 
+  Alert,
+  Card,
+  Space,
+  Typography,
+  Grid
+} from 'antd';
+import { 
+  CheckOutlined, 
+  CloseOutlined, 
+  SearchOutlined, 
+  UserOutlined, 
+  ReloadOutlined,
+  TeamOutlined
+} from '@ant-design/icons';
+import apiService from '../../services/apiService';
 
-const PassengerAssignment = ({ form }) => {
+const { Title, Text } = Typography;
+const { useBreakpoint } = Grid;
+
+const PassengerAssignment = ({ form, companyNumericId }) => {
   const [selectedPassengers, setSelectedPassengers] = useState([]);
   const [searchText, setSearchText] = useState('');
+  const [workers, setWorkers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [initialized, setInitialized] = useState(false);
+  const [error, setError] = useState(null);
+  
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
+  const isTablet = !screens.lg;
 
-  // Sample worker data with complete information for MongoDB
-  const workerData = [
-    { 
-      id: 1, 
-      workerEmployeeId: 1, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Rajesh Kumar', 
-      employeeCode: 'EMP001',
-      department: 'Welding' 
-    },
-    { 
-      id: 2, 
-      workerEmployeeId: 2, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Anil Mehta', 
-      employeeCode: 'EMP002',
-      department: 'Helper' 
-    },
-    { 
-      id: 3, 
-      workerEmployeeId: 3, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Suresh Singh', 
-      employeeCode: 'EMP003',
-      department: 'Fitter' 
-    },
-    { 
-      id: 4, 
-      workerEmployeeId: 4, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Priya Sharma', 
-      employeeCode: 'EMP004',
-      department: 'Electrical' 
-    },
-    { 
-      id: 5, 
-      workerEmployeeId: 5, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Meena Patel', 
-      employeeCode: 'EMP005',
-      department: 'Painting' 
-    },
-    { 
-      id: 6, 
-      workerEmployeeId: 6, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Rahul Verma', 
-      employeeCode: 'EMP006',
-      department: 'Welding' 
-    },
-    { 
-      id: 7, 
-      workerEmployeeId: 7, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Kavita Reddy', 
-      employeeCode: 'EMP007',
-      department: 'Helper' 
-    },
-    { 
-      id: 8, 
-      workerEmployeeId: 8, // Changed from employeeId to workerEmployeeId
-      employeeName: 'Vikram Joshi', 
-      employeeCode: 'EMP008',
-      department: 'Fitter' 
-    },
-  ];
+  // Fetch worker employees from API
+  const fetchWorkerEmployees = async () => {
+    if (!companyNumericId) {
+      console.log('⚠️ No company ID provided, skipping worker fetch');
+      setWorkers([]);
+      setError(null);
+      return;
+    }
 
-  // Filter workers based on search in name or department
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('👥 Fetching worker employees for company:', companyNumericId);
+      
+      const response = await apiService.getWorkerEmployees(companyNumericId);
+      
+      if (response && response.success) {
+        console.log('✅ Worker employees fetched successfully:', response.data);
+        
+        // Transform API response to match our component structure
+        const transformedWorkers = response.data.map((employee, index) => ({
+          id: employee.id || employee._id || `emp-${index}`,
+          workerEmployeeId: employee.userId || employee.id || employee._id,
+          employeeName: employee.fullName || `Employee ${index + 1}`,
+          department: employee.jobTitle || employee.department || 'General',
+          userEmail: employee.email
+        }));
+        
+        setWorkers(transformedWorkers);
+        console.log('🔄 Transformed workers:', transformedWorkers);
+      } else {
+        console.warn('⚠️ No worker employees found or API error:', response?.message);
+        setWorkers([]);
+        setError(response?.message || 'No workers found for this company');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching worker employees:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to load worker employees';
+      setError(errorMessage);
+      message.error('Failed to load worker employees');
+      setWorkers([]);
+    } finally {
+      setLoading(false);
+      setInitialized(true);
+    }
+  };
+
+  // Filter workers based on search text
   const filteredWorkers = searchText 
-    ? workerData.filter(worker =>
-        worker.employeeName.toLowerCase().includes(searchText.toLowerCase()) ||
-        worker.department.toLowerCase().includes(searchText.toLowerCase())
+    ? workers.filter(worker =>
+        worker.employeeName?.toLowerCase().includes(searchText.toLowerCase()) ||
+        worker.department?.toLowerCase().includes(searchText.toLowerCase())
       )
-    : workerData;
+    : workers;
 
-  // Handle autofilled data from form
+  // Load initial data and set up form synchronization
   useEffect(() => {
     if (!form) return;
 
@@ -90,10 +111,9 @@ const PassengerAssignment = ({ form }) => {
         if (values.passengers && Array.isArray(values.passengers) && values.passengers.length > 0) {
           console.log('🔄 Setting selected passengers from form:', values.passengers);
           
-          // Map the stored passenger data to match our worker data structure
           const mappedPassengers = values.passengers.map(passenger => {
-            // Find matching worker by ID or create a compatible object
-            const matchingWorker = workerData.find(worker => 
+            // Try to find matching worker in current workers list
+            const matchingWorker = workers.find(worker => 
               worker.id === passenger.id || 
               worker.workerEmployeeId === passenger.workerEmployeeId ||
               worker.employeeName === passenger.employeeName
@@ -102,13 +122,13 @@ const PassengerAssignment = ({ form }) => {
             if (matchingWorker) {
               return matchingWorker;
             } else {
-              // If no exact match, create a compatible object from the passenger data
+              // If no match found, use the passenger data as is
               return {
-                id: passenger.id || passenger.workerEmployeeId,
+                id: passenger.id || passenger.workerEmployeeId || `pass-${Math.random()}`,
                 workerEmployeeId: passenger.workerEmployeeId || passenger.id,
                 employeeName: passenger.employeeName || `Passenger ${passenger.id}`,
-                employeeCode: passenger.employeeCode || `EMP${passenger.id}`,
-                department: passenger.department || 'General'
+                department: passenger.department || 'General',
+                ...passenger
               };
             }
           });
@@ -120,34 +140,44 @@ const PassengerAssignment = ({ form }) => {
       }
     };
 
-    // Check immediately
-    checkAndSetPassengers();
-
-    // Set up periodic checks to catch autofilled values
+    // Set up intervals to check form data
     const intervals = [
       setTimeout(checkAndSetPassengers, 300),
       setTimeout(checkAndSetPassengers, 800),
       setTimeout(checkAndSetPassengers, 1500),
-      setTimeout(checkAndSetPassengers, 2500),
-      setTimeout(checkAndSetPassengers, 4000)
     ];
 
     return () => {
       intervals.forEach(clearTimeout);
     };
-  }, [form]);
+  }, [form, workers]);
+
+  // Fetch workers when company ID changes
+  useEffect(() => {
+    if (companyNumericId) {
+      console.log('🏢 Company ID changed, fetching workers:', companyNumericId);
+      fetchWorkerEmployees();
+    } else {
+      console.log('🏢 No company ID available');
+      setWorkers([]);
+      setSelectedPassengers([]);
+      setError(null);
+    }
+  }, [companyNumericId]);
 
   const handleSelectAll = () => {
-    const allPassengers = [...workerData];
+    if (workers.length === 0) return;
+    
+    const allPassengers = [...workers];
     setSelectedPassengers(allPassengers);
-    // Directly set form value
     form.setFieldsValue({ passengers: allPassengers });
+    message.success(`Selected all ${allPassengers.length} workers`);
   };
 
   const handleClearAll = () => {
     setSelectedPassengers([]);
-    // Directly set form value
     form.setFieldsValue({ passengers: [] });
+    message.info('Cleared all selections');
   };
 
   const handleSearch = (e) => {
@@ -163,179 +193,294 @@ const PassengerAssignment = ({ form }) => {
     }
     
     setSelectedPassengers(updatedPassengers);
-    // Directly set form value
     form.setFieldsValue({ passengers: updatedPassengers });
+    
+    console.log('🔄 Updated passengers:', updatedPassengers);
   };
 
   const handleSelectAllInTable = (checked) => {
     let updatedPassengers;
     if (checked) {
-      // Add all filtered workers that are not already selected
       const newSelections = filteredWorkers.filter(worker => 
         !selectedPassengers.some(p => p.id === worker.id)
       );
       updatedPassengers = [...selectedPassengers, ...newSelections];
     } else {
-      // Remove only the filtered workers from selection
       const filteredIds = filteredWorkers.map(worker => worker.id);
       updatedPassengers = selectedPassengers.filter(p => !filteredIds.includes(p.id));
     }
     
     setSelectedPassengers(updatedPassengers);
-    // Directly set form value
     form.setFieldsValue({ passengers: updatedPassengers });
+    
+    console.log('🔄 Updated passengers after select all:', updatedPassengers);
   };
 
-  // Check if a worker is selected
   const isWorkerSelected = (workerId) => {
     return selectedPassengers.some(p => p.id === workerId);
   };
 
-  // Table columns
-  const columns = [
-    {
-      title: 'Select',
-      dataIndex: 'id',
-      key: 'select',
-      width: 80,
-      render: (id, record) => (
-        <Checkbox
-          checked={isWorkerSelected(id)}
-          onChange={(e) => handleSelectWorker(record, e.target.checked)}
-        />
-      ),
-    },
-    {
-      title: 'Employee Code',
-      dataIndex: 'employeeCode',
-      key: 'employeeCode',
-      render: (code) => (
-        <span className="font-mono text-gray-600">{code}</span>
-      ),
-    },
-    {
-      title: 'Worker Name',
-      dataIndex: 'employeeName',
-      key: 'employeeName',
-      render: (name) => (
-        <div className="flex items-center">
-          <UserOutlined className="text-gray-400 mr-2" />
-          <span className="font-medium">{name}</span>
-        </div>
-      ),
-    },
-    {
-      title: 'Department',
-      dataIndex: 'department',
-      key: 'department',
-      render: (department) => (
-        <span className="text-gray-600">{department}</span>
-      ),
-    },
-  ];
-
-  return (
-    <div className="mb-8">
-      <div className="text-lg font-semibold text-gray-800 mb-4">PASSENGER ASSIGNMENT</div>
-      <div className="border-l-4 border-purple-500 pl-4">
-        {/* Remove the Form.Item wrapper and manage validation differently */}
-        <div className="space-y-4">
-          {/* Search Box */}
-          <div>
-            <div className="text-sm font-medium text-gray-700 mb-2">Search Worker Name / Department</div>
-            <Input
-              placeholder="Search by name or department"
-              prefix={<SearchOutlined className="text-gray-400" />}
-              value={searchText}
-              onChange={handleSearch}
-              size="large"
-              allowClear
-              style={{ marginBottom: '16px' }}
-            />
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex space-x-2 mb-4">
-            <Button 
-              type="default" 
-              size="middle" 
-              icon={<CheckOutlined />}
-              onClick={handleSelectAll}
-            >
-              Select All
-            </Button>
-            <Button 
-              type="default" 
-              size="middle" 
-              icon={<CloseOutlined />}
-              onClick={handleClearAll}
-            >
-              Clear All
-            </Button>
-          </div>
-
-          {/* Workers Table */}
-          <div className="border border-gray-200 rounded-lg">
-            <Table
-              columns={columns}
-              dataSource={filteredWorkers}
-              rowKey="id"
-              pagination={false}
-              scroll={{ y: 300 }}
-              size="middle"
-              rowClassName="hover:bg-gray-50"
-              title={() => (
-                <div className="flex justify-between items-center p-2 bg-gray-50">
-                  <span className="font-medium text-gray-700">
-                    Workers List ({filteredWorkers.length} found)
-                    {selectedPassengers.length > 0 && ` - ${selectedPassengers.length} selected`}
-                  </span>
-                  <Checkbox
-                    onChange={(e) => handleSelectAllInTable(e.target.checked)}
-                    checked={
-                      filteredWorkers.length > 0 && 
-                      filteredWorkers.every(worker => isWorkerSelected(worker.id))
-                    }
-                    indeterminate={
-                      filteredWorkers.some(worker => isWorkerSelected(worker.id)) &&
-                      !filteredWorkers.every(worker => isWorkerSelected(worker.id))
-                    }
-                  >
-                    Select All
-                  </Checkbox>
+  // Responsive columns configuration - no horizontal scroll needed
+  const getColumns = () => {
+    const baseColumns = [
+      {
+        title: 'Select',
+        dataIndex: 'id',
+        key: 'select',
+        width: isMobile ? 60 : 80,
+        render: (id, record) => (
+          <Checkbox
+            checked={isWorkerSelected(id)}
+            onChange={(e) => handleSelectWorker(record, e.target.checked)}
+            disabled={loading}
+          />
+        ),
+      },
+      {
+        title: 'Worker Name',
+        dataIndex: 'employeeName',
+        key: 'employeeName',
+        render: (name, record) => (
+          <Space size="small" direction={isMobile ? "vertical" : "horizontal"} align={isMobile ? "start" : "center"}>
+            <UserOutlined className="text-gray-400" />
+            <div>
+              <div className="font-medium" style={{ fontSize: isMobile ? '12px' : '14px' }}>
+                {name}
+              </div>
+              {record.userEmail && (
+                <div className="text-xs text-gray-500" style={{ fontSize: isMobile ? '10px' : '12px' }}>
+                  {record.userEmail}
                 </div>
               )}
-            />
-          </div>
-
-          {/* Selected Count */}
-          {selectedPassengers.length > 0 && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded">
-              <div className="text-sm font-medium text-blue-700">
-                {selectedPassengers.length} worker(s) selected for transport
-              </div>
-              <div className="text-xs text-blue-600 mt-1">
-                Selected: {selectedPassengers.map(p => p.employeeName).join(', ')}
-              </div>
             </div>
-          )}
+          </Space>
+        ),
+      },
+      {
+        title: 'Job Title',
+        dataIndex: 'department',
+        key: 'department',
+        width: isMobile ? 100 : 150,
+        render: (department) => (
+          <Text type="secondary" style={{ fontSize: isMobile ? '12px' : '14px' }}>
+            {department}
+          </Text>
+        ),
+      },
+    ];
 
-          {/* Hidden form field to store the data */}
-          <Form.Item
-            name="passengers"
-            rules={[
-              { 
-                required: true, 
-                message: 'Please select at least one passenger' 
-              }
-            ]}
-            style={{ display: 'none' }} // Hide the form item but keep validation
-          >
-            <Input type="hidden" />
-          </Form.Item>
+    return baseColumns;
+  };
+
+  if (loading && !initialized) {
+    return (
+      <Card className="mb-6" style={{ borderLeft: '4px solid #722ed1' }}>
+        <Title level={4} className="text-gray-800 mb-4">
+          <TeamOutlined className="mr-2" />
+          PASSENGER ASSIGNMENT
+        </Title>
+        <div className="flex justify-center items-center py-8">
+          <Spin size="large" />
+          <span className="ml-2 text-gray-600">Loading worker employees...</span>
         </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card 
+      className="mb-6" 
+      style={{ borderLeft: '4px solid #722ed1' }}
+      bodyStyle={{ padding: isMobile ? '12px' : '20px' }}
+    >
+      <Title level={4} className="text-gray-800 mb-4" style={{ fontSize: isMobile ? '16px' : '18px' }}>
+        <TeamOutlined className="mr-2" />
+        PASSENGER ASSIGNMENT
+      </Title>
+
+      <div className="space-y-4">
+        {/* Search Section */}
+        <Row gutter={[16, 16]} align="middle">
+          <Col xs={24} md={16}>
+            <Space direction="vertical" style={{ width: '100%' }} size="small">
+              <Text strong style={{ fontSize: isMobile ? '13px' : '14px' }}>Search Worker Name / Job Title</Text>
+              <Input
+                placeholder="Search by name or job title"
+                prefix={<SearchOutlined className="text-gray-400" />}
+                value={searchText}
+                onChange={handleSearch}
+                size={isMobile ? "middle" : "large"}
+                allowClear
+                disabled={!companyNumericId || loading}
+                style={{ fontSize: isMobile ? '13px' : '14px' }}
+              />
+            </Space>
+          </Col>
+          {companyNumericId && !isMobile && (
+            <Col xs={24} md={8}>
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                Company ID: {companyNumericId}
+              </Text>
+            </Col>
+          )}
+        </Row>
+
+        {/* Error Alert */}
+        {error && (
+          <Alert
+            message="Error Loading Workers"
+            description={error}
+            type="error"
+            showIcon
+            action={
+              <Button size="small" onClick={fetchWorkerEmployees}>
+                Retry
+              </Button>
+            }
+            style={{ fontSize: isMobile ? '12px' : '14px' }}
+          />
+        )}
+
+        {/* No Company Selected */}
+        {!companyNumericId ? (
+          <Alert
+            message="Company Selection Required"
+            description="Please select a company first to load available workers."
+            type="warning"
+            showIcon
+            style={{ fontSize: isMobile ? '12px' : '14px' }}
+          />
+        ) : workers.length === 0 && initialized && !error ? (
+          <Alert
+            message="No Workers Found"
+            description="No active worker employees found for this company."
+            type="info"
+            showIcon
+            style={{ fontSize: isMobile ? '12px' : '14px' }}
+          />
+        ) : (
+          <>
+            {/* Action Buttons */}
+            <Row gutter={[8, 8]} justify="space-between" align="middle">
+              <Col>
+                <Space wrap size={isMobile ? "small" : "middle"}>
+                  <Button 
+                    type="default" 
+                    icon={<CheckOutlined />}
+                    onClick={handleSelectAll}
+                    disabled={workers.length === 0 || loading}
+                    size={isMobile ? "small" : "middle"}
+                    style={{ fontSize: isMobile ? '12px' : '14px' }}
+                  >
+                    {isMobile ? `All (${workers.length})` : `Select All (${workers.length})`}
+                  </Button>
+                  <Button 
+                    type="default" 
+                    icon={<CloseOutlined />}
+                    onClick={handleClearAll}
+                    disabled={selectedPassengers.length === 0 || loading}
+                    size={isMobile ? "small" : "middle"}
+                    style={{ fontSize: isMobile ? '12px' : '14px' }}
+                  >
+                    {isMobile ? 'Clear' : 'Clear All'}
+                  </Button>
+                </Space>
+              </Col>
+              <Col>
+                <Button 
+                  type="default" 
+                  icon={<ReloadOutlined />}
+                  onClick={fetchWorkerEmployees}
+                  loading={loading}
+                  size={isMobile ? "small" : "middle"}
+                  style={{ fontSize: isMobile ? '12px' : '14px' }}
+                >
+                  {isMobile ? '' : 'Refresh'}
+                </Button>
+              </Col>
+            </Row>
+
+            {/* Workers Table */}
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <Row justify="space-between" align="middle" gutter={[8, 8]}>
+                  <Col>
+                    <Text strong style={{ fontSize: isMobile ? '13px' : '14px' }}>
+                      Workers List ({filteredWorkers.length} found)
+                      {selectedPassengers.length > 0 && ` - ${selectedPassengers.length} selected`}
+                    </Text>
+                  </Col>
+                  <Col>
+                    <Checkbox
+                      onChange={(e) => handleSelectAllInTable(e.target.checked)}
+                      checked={
+                        filteredWorkers.length > 0 && 
+                        filteredWorkers.every(worker => isWorkerSelected(worker.id))
+                      }
+                      indeterminate={
+                        filteredWorkers.some(worker => isWorkerSelected(worker.id)) &&
+                        !filteredWorkers.every(worker => isWorkerSelected(worker.id))
+                      }
+                      disabled={filteredWorkers.length === 0}
+                      style={{ fontSize: isMobile ? '12px' : '14px' }}
+                    >
+                      {isMobile ? 'All' : 'Select All'}
+                    </Checkbox>
+                  </Col>
+                </Row>
+              </div>
+              <Table
+                columns={getColumns()}
+                dataSource={filteredWorkers}
+                rowKey="id"
+                pagination={false}
+                scroll={{ y: isMobile ? 250 : 350 }}
+                size={isMobile ? "small" : "middle"}
+                rowClassName="hover:bg-gray-50"
+                loading={loading}
+                locale={{
+                  emptyText: searchText ? 'No workers match your search' : 'No workers available'
+                }}
+                style={{
+                  fontSize: isMobile ? '12px' : '14px'
+                }}
+                className="no-horizontal-scroll"
+              />
+            </div>
+          </>
+        )}
+
+        {/* Selection Summary */}
+        {selectedPassengers.length > 0 && (
+          <Alert
+            message={`${selectedPassengers.length} worker(s) selected for transport`}
+            description={
+              <Text type="success" style={{ fontSize: isMobile ? '11px' : '12px' }}>
+                <strong>Selected:</strong> {selectedPassengers.slice(0, 3).map(p => p.employeeName).join(', ')}
+                {selectedPassengers.length > 3 && ` and ${selectedPassengers.length - 3} more...`}
+              </Text>
+            }
+            type="success"
+            showIcon
+            style={{ fontSize: isMobile ? '12px' : '14px' }}
+          />
+        )}
+
+        {/* Hidden Form Field */}
+        <Form.Item
+          name="passengers"
+          rules={[
+            { 
+              required: true, 
+              message: 'Please select at least one passenger' 
+            }
+          ]}
+          style={{ display: 'none' }}
+        >
+          <Input type="hidden" />
+        </Form.Item>
       </div>
-    </div>
+    </Card>
   );
 };
 

@@ -1,35 +1,32 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const projectSchema = new mongoose.Schema({
-  // Primary ID (numeric like your companies)
   id: {
     type: Number,
     required: true,
     unique: true
   },
-  // Company reference (numeric ID to match your existing structure)
   companyId: {
     type: Number,
-    required: true
+    required: true,
+    index: true
   },
-  // Project code (unique identifier)
   projectCode: {
     type: String,
     unique: true,
-    sparse: true,
-    trim: true
+    trim: true,
+    index: true
   },
-  // Basic project information
   name: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    index: true
   },
   description: {
     type: String,
     trim: true
   },
-  // Job classification
   jobNature: {
     type: String,
     trim: true
@@ -38,26 +35,25 @@ const projectSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  // Project timeline
   startDate: {
-    type: Date
+    type: Date,
+    index: true
   },
   endDate: {
-    type: Date
+    type: Date,
+    index: true
   },
-  // Financial information
   budget: {
     type: Number,
     min: 0
   },
-  // Project status
   status: {
     type: String,
     required: true,
     enum: ['Planned', 'Ongoing', 'Completed', 'Warranty', 'Cancelled'],
-    default: 'Planned'
+    default: 'Planned',
+    index: true
   },
-  // Permit information
   permitRequired: {
     type: Boolean,
     default: false
@@ -66,44 +62,35 @@ const projectSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  // Geographical data
   siteGeo: {
-    type: Object // For polygon geometry
+    type: Object
   },
   sitePoint: {
-    type: Object // For point geometry
+    type: Object
   },
-  // Location information
   address: {
     type: String,
     trim: true
   },
-  // Contact information
   contactPerson: {
     type: Object,
     default: {}
   },
-  // Metadata and additional information
   meta: {
     type: Object,
     default: {}
   },
-  // Creator reference
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    type: Number,
+    required: true,
+    index: true
   }
 }, {
-  timestamps: true // This automatically adds createdAt and updatedAt
+  timestamps: true
 });
 
-// Indexes for better query performance
+// Add essential indexes
 projectSchema.index({ companyId: 1, status: 1 });
 projectSchema.index({ companyId: 1, startDate: -1 });
-projectSchema.index({ projectCode: 1 }, { unique: true, sparse: true });
-projectSchema.index({ id: 1 }, { unique: true });
-projectSchema.index({ status: 1 });
-projectSchema.index({ startDate: 1 });
 
-module.exports = mongoose.model('Project', projectSchema);
+export default mongoose.model('Project', projectSchema);

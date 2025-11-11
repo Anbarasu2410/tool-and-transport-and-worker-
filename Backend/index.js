@@ -1,18 +1,21 @@
-const express = require('express');
-const cors = require('cors');
-const connectDB = require('./config/database');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import connectDB from './config/database.js';
+import dotenv from 'dotenv';
 
-const userRoutes = require('./routes/userRoutes');
-const companyRoutes = require('./routes/companyRoutes');
-const employeeRoutes = require('./routes/employeeRoutes');
-const fleetVehicleRoutes = require('./routes/fleetVehicleRoutes');
-const fleetTaskRoutes = require('./routes/fleetTaskRoutes');
-const fleetTaskPassengerRoutes = require('./routes/fleetTaskPassengerRoutes');
-const fleetAlertRoutes = require('./routes/fleetAlertRoutes');
-const driverRoutes = require('./routes/driverRoutes');
-const projectRoutes = require('./routes/projectRoutes'); 
-//const emailRoutes = require('./routes/emailRoutes');// This is already included
+// Route imports
+import userRoutes from './routes/userRoutes.js';
+import companyRoutes from './routes/companyRoutes.js';
+import employeeRoutes from './routes/employeeRoutes.js';
+import fleetVehicleRoutes from './routes/fleetVehicleRoutes.js';
+import fleetTaskRoutes from './routes/fleetTaskRoutes.js';
+import fleetTaskPassengerRoutes from './routes/fleetTaskPassengerRoutes.js';
+import fleetAlertRoutes from './routes/fleetAlertRoutes.js';
+import driverRoutes from './routes/driverRoutes.js';
+import projectRoutes from './routes/projectRoutes.js';
+import taskRoutes from './routes/taskRoutes.js';
+
+dotenv.config();
 
 const app = express();
 
@@ -34,7 +37,7 @@ app.use('/api/fleet-task-passengers', fleetTaskPassengerRoutes);
 app.use('/api/fleet-alerts', fleetAlertRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/projects', projectRoutes);
-//app.use('/api/email', emailRoutes); // Already using projectRoutes
+app.use('/api/tasks', taskRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
@@ -49,7 +52,8 @@ app.get('/', (req, res) => {
       fleetTaskPassengers: '/api/fleet-task-passengers',
       fleetAlerts: '/api/fleet-alerts',
       drivers: '/api/drivers',
-      projects: '/api/projects'
+      projects: '/api/projects',
+       tasks: '/api/tasks' 
     }
   });
 });
@@ -81,3 +85,5 @@ app.listen(PORT, () => {
   console.log(`📊 API available at: http://localhost:${PORT}`);
   console.log(`🏗️ Projects API available at: http://localhost:${PORT}/api/projects`);
 });
+
+export default app;

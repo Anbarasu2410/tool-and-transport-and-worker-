@@ -11,7 +11,6 @@ import dayjs from 'dayjs';
 
 const { confirm } = Modal;
 
-// Helper function to remove duplicate passengers
 const removeDuplicatePassengers = (passengers) => {
   if (!passengers || !Array.isArray(passengers)) return [];
   
@@ -41,22 +40,18 @@ const HomePage = () => {
   const [originalEditData, setOriginalEditData] = useState(null);
   const navigate = useNavigate();
 
-  // Email notification function with detailed debugging
   const sendEmailNotification = async (taskData, taskType) => {
     try {
       console.log('📧 === DEBUG: STARTING EMAIL NOTIFICATION ===');
       console.log('📧 Task Type:', taskType);
       console.log('📧 Task Data:', taskData);
-      console.log('📧 Company Name:', companyName);
-      console.log('📧 Project Name:', projectName);
-      console.log('📧 Editing Task ID:', editingTaskId);
 
       const notificationData = {
         taskType: taskType,
         companyName: companyName || 'Unknown Company',
         projectName: projectName || 'No Project',
         taskDate: taskData.taskDate || new Date(),
-        recipientEmail: 'anbuarasu2017@gmail.com', // Use your actual email
+        recipientEmail: 'anbuarasu2017@gmail.com',
         taskId: taskType === 'create' ? (taskData.id || 'Unknown') : (editingTaskId || 'Unknown'),
         vehicleId: taskData.vehicleId || 'N/A',
         driverId: taskData.driverId || 'N/A',
@@ -85,7 +80,6 @@ const HomePage = () => {
     }
   };
 
-  // Load companies and editing data when component mounts
   useEffect(() => {
     console.log('🏠 HomePage mounted - checking for editing data...');
     loadCompanies();
@@ -120,13 +114,11 @@ const HomePage = () => {
           setEditTaskData(taskData);
           setOriginalEditData(taskData);
           
-          // Set initial company data from edit data
           if (taskData.companyId) {
             setCompanyNumericId(taskData.companyId);
             setCompanyName(taskData.companyName || '');
           }
 
-          // Set initial project data
           if (taskData.projectId) {
             setProjectNumericId(taskData.projectId);
             setProjectName(taskData.projectName || '');
@@ -139,7 +131,6 @@ const HomePage = () => {
             projectName: taskData.projectName
           });
 
-          // Clear the localStorage after loading
           localStorage.removeItem('editingFleetTask');
           console.log('🧹 Cleared editingFleetTask from localStorage');
 
@@ -155,30 +146,24 @@ const HomePage = () => {
     }
   };
 
-  // Enhanced company change handler for edit mode
   const handleCompanyChange = (companyMongoId, numericId, companyName) => {
     console.log('🏢 Company changing to:', { companyMongoId, numericId, companyName });
     console.log('📝 Current edit mode:', isEditing);
     console.log('📋 Current edit task data:', editTaskData);
     
-    // Always update company state
     setSelectedCompany(companyMongoId);
     setCompanyNumericId(numericId);
     setCompanyName(companyName || '');
 
-    // Reset project when company changes
     setProjectName('');
     setProjectNumericId(null);
 
     if (isEditing && editTaskData) {
-      // EDIT MODE: Preserve location data but reset dependent fields
       console.log('🔄 EDIT MODE: Handling company change while preserving locations');
       
-      // Get current form values to preserve locations and dates
       const currentFormValues = form.getFieldsValue();
       console.log('📋 Current form values before reset:', currentFormValues);
       
-      // Preserve these fields from the original edit data or current form
       const preservedFields = {
         taskDate: currentFormValues.taskDate || (editTaskData.taskDate ? dayjs(editTaskData.taskDate) : null),
         pickupTime: currentFormValues.pickupTime || (editTaskData.plannedPickupTime ? dayjs(editTaskData.plannedPickupTime) : null),
@@ -193,7 +178,6 @@ const HomePage = () => {
 
       console.log('💾 Preserved fields:', preservedFields);
 
-      // Reset form but preserve important fields
       setTimeout(() => {
         form.setFieldsValue({
           company: companyMongoId,
@@ -207,7 +191,6 @@ const HomePage = () => {
       }, 0);
 
     } else {
-      // CREATE MODE: Reset everything
       console.log('🔄 CREATE MODE: Resetting all fields');
       setTimeout(() => {
         form.setFieldsValue({
@@ -271,12 +254,10 @@ const HomePage = () => {
       console.log('Company numeric ID:', companyNumericId, 'Company Name:', companyName);
       console.log('Project numeric ID:', projectNumericId, 'Project Name:', projectName);
 
-      // Check if required fields are present
       if (!values.company || !values.vehicleId || !values.taskDate) {
         throw new Error('Please fill all required fields: Company, Vehicle, and Task Date');
       }
 
-      // Check if passengers exist
       if (!values.passengers || values.passengers.length === 0) {
         throw new Error('No passengers selected. Please select at least one passenger.');
       }
@@ -285,24 +266,19 @@ const HomePage = () => {
         throw new Error('Company ID not found. Please select a company again.');
       }
 
-      // FIXED: Proper date formatting to avoid timezone issues
       const formatDateForBackend = (date) => {
         if (!date) return null;
         
         try {
-          // If it's a Day.js object
           if (date && date.$d) {
             const jsDate = date.$d;
-            // Create ISO string in local timezone
             return jsDate.toISOString();
           }
           
-          // If it's already a JavaScript Date
           if (date instanceof Date) {
             return date.toISOString();
           }
           
-          // If it's a string
           if (typeof date === 'string') {
             return new Date(date).toISOString();
           }
@@ -314,12 +290,10 @@ const HomePage = () => {
         }
       };
 
-      // Generate a unique ID for passengers
       const generateId = () => {
         return Math.floor(Math.random() * 1000000) + 1;
       };
 
-      // Step 1: Create Fleet Task in fleetTasks collection
       const fleetTaskData = {
         companyId: Number(companyNumericId),
         companyName: companyName,
@@ -327,7 +301,6 @@ const HomePage = () => {
         projectName: projectName,
         driverId: values.driverId ? Number(values.driverId) : null,
         vehicleId: values.vehicleId ? Number(values.vehicleId) : null,
-        // FIXED: Use proper date formatting
         taskDate: formatDateForBackend(values.taskDate),
         plannedPickupTime: values.pickupTime ? formatDateForBackend(values.pickupTime) : null,
         plannedDropTime: values.dropTime ? formatDateForBackend(values.dropTime) : null,
@@ -347,7 +320,6 @@ const HomePage = () => {
         plannedDropTime: fleetTaskData.plannedDropTime ? new Date(fleetTaskData.plannedDropTime) : null
       });
 
-      // Create fleet task using apiService
       console.log('=== DEBUG: CREATING FLEET TASK ===');
       const taskResponse = await apiService.createFleetTask(fleetTaskData);
       console.log('=== DEBUG: FLEET TASK API RESPONSE ===', taskResponse);
@@ -357,7 +329,6 @@ const HomePage = () => {
         throw new Error(taskResponse.message || 'Failed to create fleet task');
       }
 
-      // Get the actual fleet task ID from the backend response
       if (!taskResponse.data || !taskResponse.data.id) {
         throw new Error('Fleet task was created but no ID returned from backend');
       }
@@ -365,33 +336,23 @@ const HomePage = () => {
       createdFleetTaskId = taskResponse.data.id;
       console.log('✅ Fleet task created successfully with ID:', createdFleetTaskId);
 
-      // Wait a bit for database to sync
       console.log('=== DEBUG: WAITING FOR DATABASE SYNC ===');
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Step 2: Create Passenger Records using apiService
       console.log('=== DEBUG: CREATING PASSENGER RECORDS ===');
       console.log('Passengers to create:', values.passengers);
       
       const passengerPromises = values.passengers.map((passenger, index) => {
         console.log(`=== DEBUG: PROCESSING PASSENGER ${index + 1} ===`, passenger);
         
-        // Use the correct employee ID - try multiple possible fields
-        const employeeId = passenger.workerEmployeeId || passenger.id || (index + 1);
-        console.log(`=== DEBUG: PASSENGER ${index + 1} EMPLOYEE ID RESOLVED ===`, {
-          workerEmployeeId: passenger.workerEmployeeId,
-          id: passenger.id,
-          finalEmployeeId: employeeId
-        });
-        
         const passengerData = {
           id: generateId() + index,
           companyId: Number(companyNumericId),
           companyName: companyName,
           fleetTaskId: Number(createdFleetTaskId),
-          workerEmployeeId: Number(employeeId),
+          workerEmployeeId: Number(passenger.workerEmployeeId || passenger.id || (index + 1)),
           employeeName: passenger.employeeName || `Passenger ${index + 1}`,
-          employeeCode: passenger.employeeCode || `P${index + 1}`,
+          employeeCode: passenger.employeeCode || `EMP${index + 1}`,
           department: passenger.department || 'General',
           pickupLocation: values.pickupLocation || 'Default Pickup',
           dropLocation: values.dropLocation || 'Default Drop',
@@ -401,12 +362,10 @@ const HomePage = () => {
 
         console.log(`=== DEBUG: PASSENGER ${index + 1} DATA FOR API ===`, passengerData);
 
-        // Verify all required fields are present and are numbers
         if (!passengerData.id || !passengerData.companyId || !passengerData.fleetTaskId || !passengerData.workerEmployeeId) {
-          throw new Error(`Passenger ${index + 1} missing required fields: id=${passengerData.id}, companyId=${passengerData.companyId}, fleetTaskId=${passengerData.fleetTaskId}, workerEmployeeId=${passengerData.workerEmployeeId}`);
+          throw new Error(`Passenger ${index + 1} missing required fields`);
         }
 
-        // Use apiService to create passenger
         return apiService.createFleetTaskPassenger(passengerData)
           .then((result) => {
             console.log(`=== DEBUG: PASSENGER ${index + 1} API RESPONSE ===`, result);
@@ -423,14 +382,12 @@ const HomePage = () => {
           });
       });
 
-      // Wait for all passenger records to be created
       console.log('=== DEBUG: WAITING FOR ALL PASSENGER CREATIONS ===');
       const passengerResults = await Promise.all(passengerPromises);
       console.log('=== DEBUG: ALL PASSENGERS CREATED SUCCESSFULLY ===', passengerResults);
 
       console.log(`✅ Successfully created ${passengerResults.length} passenger records`);
 
-      // STEP: Send email notification BEFORE showing success message
       console.log('📧 === CALLING EMAIL NOTIFICATION FOR CREATION ===');
       const emailSent = await sendEmailNotification(
         { ...fleetTaskData, id: createdFleetTaskId }, 
@@ -445,10 +402,8 @@ const HomePage = () => {
 
       message.success('Transport Schedule Created Successfully!');
       
-      // Reset form
       resetForm();
       
-      // Navigate back to fleet tasks page
       setTimeout(() => {
         navigate('/fleet-tasks');
       }, 1000);
@@ -456,7 +411,6 @@ const HomePage = () => {
     } catch (error) {
       console.error('❌ Error creating schedule:', error);
       
-      // Clean up: If fleet task was created but passengers failed, delete the fleet task
       if (createdFleetTaskId) {
         try {
           console.log('=== DEBUG: ATTEMPTING TO CLEAN UP FLEET TASK ===', createdFleetTaskId);
@@ -473,7 +427,6 @@ const HomePage = () => {
     }
   };
 
-  // Enhanced update schedule to handle company changes
   const handleUpdateSchedule = async (values) => {
     setLoading(true);
     
@@ -485,7 +438,6 @@ const HomePage = () => {
       console.log('📊 CURRENT PROJECT DATA:', { projectNumericId, projectName });
       console.log('📝 ORIGINAL EDIT DATA:', originalEditData);
 
-      // Check if required fields are present
       if (!values.company || !values.vehicleId || !values.taskDate) {
         throw new Error('Please fill all required fields: Company, Vehicle, and Task Date');
       }
@@ -494,24 +446,19 @@ const HomePage = () => {
         throw new Error('Company ID not found. Please select a company again.');
       }
 
-      // FIXED: Proper date formatting for updates
       const formatDateForBackend = (date) => {
         if (!date) return null;
         
         try {
-          // If it's a Day.js object
           if (date && date.$d) {
             const jsDate = date.$d;
-            // Create ISO string in local timezone
             return jsDate.toISOString();
           }
           
-          // If it's already a JavaScript Date
           if (date instanceof Date) {
             return date.toISOString();
           }
           
-          // If it's a string
           if (typeof date === 'string') {
             return new Date(date).toISOString();
           }
@@ -523,7 +470,6 @@ const HomePage = () => {
         }
       };
 
-      // Step 1: Update Fleet Task with CURRENT company data (even if changed)
       const fleetTaskData = {
         companyId: Number(companyNumericId),
         companyName: companyName,
@@ -531,7 +477,6 @@ const HomePage = () => {
         projectName: projectName,
         driverId: values.driverId ? Number(values.driverId) : null,
         vehicleId: values.vehicleId ? Number(values.vehicleId) : null,
-        // FIXED: Use proper date formatting
         taskDate: formatDateForBackend(values.taskDate),
         plannedPickupTime: values.pickupTime ? formatDateForBackend(values.pickupTime) : null,
         plannedDropTime: values.dropTime ? formatDateForBackend(values.dropTime) : null,
@@ -550,7 +495,6 @@ const HomePage = () => {
         plannedDropTime: fleetTaskData.plannedDropTime ? new Date(fleetTaskData.plannedDropTime) : null
       });
       
-      // Update fleet task using apiService
       console.log('🔄 === DEBUG: CALLING UPDATE FLEET TASK API ===');
       const updateResponse = await apiService.updateFleetTask(editingTaskId, fleetTaskData);
       console.log('✅ === DEBUG: FLEET TASK UPDATE API RESPONSE ===', updateResponse);
@@ -562,13 +506,11 @@ const HomePage = () => {
 
       console.log('✅ Fleet task updated successfully');
 
-      // Step 2: COMPLETE PASSENGER REPLACEMENT STRATEGY
       if (values.passengers) {
         console.log('=== DEBUG: COMPLETE PASSENGER REPLACEMENT ===');
         console.log('Selected passengers in form:', values.passengers);
         
         try {
-          // Get current passengers from database for this task
           console.log('📋 Fetching current passengers for task:', editingTaskId);
           const currentPassengersResponse = await apiService.getFleetTaskPassengersByTaskId(editingTaskId);
           const currentPassengers = Array.isArray(currentPassengersResponse.data) 
@@ -577,7 +519,6 @@ const HomePage = () => {
           
           console.log('📋 Current passengers in database:', currentPassengers.length);
           
-          // Normalize passenger data for comparison
           const normalizedFormPassengers = values.passengers.map(passenger => ({
             employeeCode: passenger.employeeCode,
             employeeName: passenger.employeeName,
@@ -587,11 +528,9 @@ const HomePage = () => {
           
           console.log('✅ Normalized form passengers:', normalizedFormPassengers);
           
-          // Remove duplicates from normalized form passengers
           const uniqueFormPassengers = removeDuplicatePassengers(normalizedFormPassengers);
           console.log('✅ Unique passengers from form after deduplication:', uniqueFormPassengers.length);
           
-          // Create lookup maps for efficient comparison
           const formPassengerMap = new Map();
           uniqueFormPassengers.forEach(passenger => {
             const key = `${passenger.employeeCode}-${passenger.employeeName}`;
@@ -607,7 +546,6 @@ const HomePage = () => {
           console.log('🔍 Form passenger keys:', Array.from(formPassengerMap.keys()));
           console.log('🔍 Current passenger keys:', Array.from(currentPassengerMap.keys()));
           
-          // Identify passengers to DELETE (in database but not in form)
           const passengersToDelete = currentPassengers.filter(passenger => {
             const key = `${passenger.employeeCode}-${passenger.employeeName}`;
             return !formPassengerMap.has(key);
@@ -616,7 +554,6 @@ const HomePage = () => {
           console.log('🗑️ Passengers to delete (not in form):', passengersToDelete.length);
           console.log('Passengers to delete details:', passengersToDelete.map(p => `${p.employeeName} (${p.employeeCode})`));
           
-          // Identify passengers to CREATE (in form but not in database)
           const passengersToCreate = uniqueFormPassengers.filter(passenger => {
             const key = `${passenger.employeeCode}-${passenger.employeeName}`;
             return !currentPassengerMap.has(key);
@@ -625,7 +562,6 @@ const HomePage = () => {
           console.log('👥 Passengers to create (new in form):', passengersToCreate.length);
           console.log('Passengers to create details:', passengersToCreate.map(p => `${p.employeeName} (${p.employeeCode})`));
           
-          // DELETE all passengers that are not in the form selection
           if (passengersToDelete.length > 0) {
             console.log('🗑️ Deleting passengers not in form selection...');
             const deletePromises = passengersToDelete.map(passenger => 
@@ -641,7 +577,6 @@ const HomePage = () => {
             console.log('✅ All unwanted passengers deleted');
           }
           
-          // CREATE all new passengers from form selection
           if (passengersToCreate.length > 0) {
             console.log('👥 Creating new passengers from form...');
             const createPromises = passengersToCreate.map((passenger, index) => {
@@ -694,7 +629,6 @@ const HomePage = () => {
         }
       } else {
         console.log('⚠️ No passengers selected - deleting all existing passengers');
-        // If no passengers selected, delete all existing passengers
         try {
           await apiService.deleteFleetTaskPassengersByTaskId(editingTaskId);
           console.log('✅ All passengers deleted (none selected in form)');
@@ -703,7 +637,6 @@ const HomePage = () => {
         }
       }
 
-      // STEP: Send email notification BEFORE showing success message
       console.log('📧 === CALLING EMAIL NOTIFICATION FOR UPDATE ===');
       const emailSent = await sendEmailNotification(
         { ...fleetTaskData, id: editingTaskId }, 
@@ -718,14 +651,12 @@ const HomePage = () => {
 
       message.success('Transport Schedule Updated Successfully!');
       
-      // Reset form and editing state
       resetForm();
       setIsEditing(false);
       setEditingTaskId(null);
       setEditTaskData(null);
       setOriginalEditData(null);
       
-      // Navigate back to FleetTasksPage after successful update
       setTimeout(() => {
         navigate('/fleet-tasks');
       }, 1000);
@@ -795,7 +726,10 @@ const HomePage = () => {
             editTaskData={editTaskData}
           />
           <PickupDropLocations form={form} />
-          <PassengerAssignment form={form} />
+          <PassengerAssignment 
+            form={form} 
+            companyNumericId={companyNumericId}
+          />
 
           <Row justify="end">
             <Col>

@@ -1,6 +1,5 @@
-const express = require('express');
-const router = express.Router();
-const {
+import express from 'express';
+import {
   getAllDrivers,
   getDriverById,
   createDriver,
@@ -8,7 +7,9 @@ const {
   deleteDriver,
   getDriversByCompany,
   getDriversByVehicle
-} = require('../controllers/driverController');
+} from '../controllers/driverController.js';
+
+const router = express.Router();
 
 // GET /api/drivers - Get all drivers
 router.get('/', getAllDrivers);
@@ -31,4 +32,4 @@ router.get('/company/:companyId', getDriversByCompany);
 // GET /api/drivers/vehicle/:vehicleId - Get drivers by assigned vehicle
 router.get('/vehicle/:vehicleId', getDriversByVehicle);
 
-module.exports = router;
+export default router;

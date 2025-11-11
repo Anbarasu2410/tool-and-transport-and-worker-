@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const employeeSchema = new mongoose.Schema({
   id: {
@@ -32,6 +32,10 @@ const employeeSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  photoUrl: {  // New field
+    type: String,
+    default: null
+  },
   status: {
     type: String,
     enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'],
@@ -43,4 +47,6 @@ const employeeSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Employee', employeeSchema);
+const Employee = mongoose.model('Employee', employeeSchema);
+
+export default Employee;

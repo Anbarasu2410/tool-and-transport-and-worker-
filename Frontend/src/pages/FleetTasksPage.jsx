@@ -31,8 +31,14 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import fleetTaskService from '../services/fleetTaskService';
 import apiService from '../services/apiService';
+
+// Extend dayjs with UTC and timezone plugins
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Option } = Select;
 
@@ -52,28 +58,70 @@ const FleetTasksPage = () => {
   const [loading, setLoading] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState(null);
-  const [passengers, setPassengers] = useState({}); // Store passengers separately
+  const [passengers, setPassengers] = useState({});
   const [searchForm] = Form.useForm();
   const navigate = useNavigate();
 
-  // Search states
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dateRange, setDateRange] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  // INSTANT: Single ref for API call prevention
   const isMounted = useRef(true);
 
-  // INSTANT: Ultra-fast filtering
+  // ✅ FIXED: Correct time formatting - preserves exact time without timezone shift
+ // ✅ FIXED: Correct time formatting that displays 12:00 AM as 12:00 AM
+// ✅ FIXED: Display time as 12:00 AM / 12:00 PM (without seconds)
+const formatTime = useCallback((timeString) => {
+  if (!timeString) return '';
+  try {
+    // Use local time instead of UTC to avoid timezone conversion
+    const date = new Date(timeString);
+    
+    // Extract local time components
+    let hours = date.getHours();
+    let minutes = date.getMinutes();
+    
+    // Convert to 12-hour format
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours === 0 ? 12 : hours; // the hour '0' should be '12'
+    
+    // Format with leading zeros for minutes only (no seconds)
+    minutes = minutes < 10 ? '0' + minutes : minutes;
+    
+    return `${hours}:${minutes} ${ampm}`;
+  } catch (error) {
+    console.error('Time formatting error:', error);
+    return timeString;
+  }
+}, []);
+
+  // Debug function to check what's happening with times
+  const debugTime = useCallback((timeString, label = 'Time') => {
+    if (!timeString) return;
+    const date = new Date(timeString);
+    console.log(`🕒 ${label}:`, {
+      original: timeString,
+      dateObject: date,
+      utcHours: date.getUTCHours(),
+      utcMinutes: date.getUTCMinutes(),
+      localHours: date.getHours(),
+      localMinutes: date.getMinutes(),
+      timezoneOffset: date.getTimezoneOffset(),
+      toISOString: date.toISOString(),
+      toLocaleString: date.toLocaleString('en-US'),
+      formatted: formatTime(timeString)
+    });
+  }, [formatTime]);
+
   const filteredData = useMemo(() => {
     if (!searchText && !statusFilter && (!dateRange || dateRange.length === 0)) {
       return fleetTasks;
     }
 
     return fleetTasks.filter(task => {
-      // Fast search - only check if searchText exists
       if (searchText) {
         const searchLower = searchText.toLowerCase();
         const driverMatch = task.displayDriverName?.toLowerCase().includes(searchLower);
@@ -81,12 +129,10 @@ const FleetTasksPage = () => {
         if (!driverMatch && !vehicleMatch) return false;
       }
 
-      // Fast status filter
       if (statusFilter && normalizeStatus(task.status) !== statusFilter) {
         return false;
       }
 
-      // Fast date filter - only if dateRange exists
       if (dateRange && dateRange.length === 2) {
         const taskDate = dayjs(task.taskDate);
         const start = dayjs(dateRange[0]).startOf('day');
@@ -98,17 +144,14 @@ const FleetTasksPage = () => {
     });
   }, [fleetTasks, searchText, statusFilter, dateRange]);
 
-  // INSTANT: Fast initial load
   useEffect(() => {
     isMounted.current = true;
     loadData();
-    
     return () => {
       isMounted.current = false;
     };
   }, []);
 
-  // INSTANT: Ultra-fast data loading with passengers
   const loadData = useCallback(async () => {
     if (!isMounted.current) return;
     
@@ -116,7 +159,6 @@ const FleetTasksPage = () => {
     console.time('🚀 INSTANT LOAD');
 
     try {
-      // INSTANT: Fetch both APIs in parallel
       const [tasksResponse, passengersResponse] = await Promise.all([
         fleetTaskService.getFleetTasks(),
         apiService.getFleetTaskPassengers()
@@ -124,7 +166,6 @@ const FleetTasksPage = () => {
       
       if (!isMounted.current) return;
 
-      // INSTANT: Direct data extraction
       let tasksData = [];
       if (tasksResponse?.data) {
         tasksData = Array.isArray(tasksResponse.data) ? tasksResponse.data :
@@ -140,30 +181,31 @@ const FleetTasksPage = () => {
 
       console.log(`📋 INSTANT: Loaded ${tasksData.length} tasks, ${allPassengers.length} passengers`);
 
-      // INSTANT: Create passenger map for fast lookup
       const passengerMap = {};
       allPassengers.forEach(passenger => {
         const taskId = passenger.fleetTaskId;
-        if (!passengerMap[taskId]) {
-          passengerMap[taskId] = [];
-        }
+        if (!passengerMap[taskId]) passengerMap[taskId] = [];
         passengerMap[taskId].push(passenger);
       });
 
       setPassengers(passengerMap);
 
-      // INSTANT: Minimal processing with correct workers count
       const processedTasks = tasksData.map((task) => {
         const taskId = task.id;
         const taskPassengers = passengerMap[taskId] || [];
+        
+        // Debug times for first few tasks
+        if (taskId < 3 && task.plannedPickupTime) {
+          debugTime(task.plannedPickupTime, `Task ${taskId} Pickup`);
+        }
         
         return {
           ...task,
           status: normalizeStatus(task.status),
           displayDriverName: task.driverName || `Driver ${task.driverId}`,
           displayVehicleName: task.vehicleCode || `Vehicle ${task.vehicleId}`,
-          workersAssigned: taskPassengers.length, // CORRECT: From passenger map
-          passengers: taskPassengers // Store passengers for view modal
+          workersAssigned: taskPassengers.length,
+          passengers: taskPassengers
         };
       });
 
@@ -180,9 +222,8 @@ const FleetTasksPage = () => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [debugTime]);
 
-  // INSTANT: Fast search
   const handleSearch = useCallback((values) => {
     setSearchText(values.searchText || '');
     setStatusFilter(values.status || '');
@@ -203,21 +244,19 @@ const FleetTasksPage = () => {
     navigate('/home');
   }, [navigate]);
 
-  // FIXED: Enhanced edit function to properly handle company/project names
   const handleEdit = useCallback((task) => {
     const taskId = task.id || task._id;
     const taskPassengers = passengers[taskId] || [];
 
-    // Prepare edit data with proper company and project information
     const taskData = {
       id: taskId,
       _id: task._id,
       companyId: task.companyId || 2,
       companyName: task.companyName || "Tech Solutions Inc",
-      companyMongoId: null, // Will be populated in HomePage
+      companyMongoId: null,
       projectId: task.projectId,
       projectName: task.projectName,
-      projectMongoId: null, // Will be populated in HomePage
+      projectMongoId: null,
       driverId: task.driverId,
       driverName: task.driverName || task.displayDriverName,
       vehicleId: task.vehicleId,
@@ -235,7 +274,6 @@ const FleetTasksPage = () => {
       passengers: taskPassengers,
       workersAssigned: taskPassengers.length,
       isEditing: true,
-      // Add display information for debugging
       _debug: {
         companyId: task.companyId,
         companyName: task.companyName,
@@ -249,7 +287,6 @@ const FleetTasksPage = () => {
     navigate('/home');
   }, [navigate, passengers]);
 
-  // Delete functionality
   const showDeleteConfirm = useCallback((task) => {
     setTaskToDelete(task);
     setDeleteModalVisible(true);
@@ -264,11 +301,7 @@ const FleetTasksPage = () => {
       message.success('Fleet task deleted successfully');
       setDeleteModalVisible(false);
       setTaskToDelete(null);
-      
-      // INSTANT: Remove from UI immediately
       setFleetTasks(prev => prev.filter(task => (task.id !== taskId && task._id !== taskId)));
-      
-      // Also remove from passengers
       setPassengers(prev => {
         const newPassengers = { ...prev };
         delete newPassengers[taskId];
@@ -285,7 +318,6 @@ const FleetTasksPage = () => {
     setTaskToDelete(null);
   }, []);
 
-  // INSTANT: Fast status functions
   const getStatusTag = useCallback((status) => {
     const normalizedStatus = normalizeStatus(status);
     const colorMap = {
@@ -329,8 +361,6 @@ const FleetTasksPage = () => {
       const normalizedStatus = normalizeStatus(newStatus);
       await fleetTaskService.updateFleetTaskStatus(taskId, normalizedStatus);
       message.success(`Status updated to ${normalizedStatus}`);
-      
-      // INSTANT: Update UI immediately
       setFleetTasks(prev => prev.map(task => 
         (task.id === taskId || task._id === taskId) 
           ? { ...task, status: normalizedStatus }
@@ -342,20 +372,6 @@ const FleetTasksPage = () => {
     }
   }, []);
 
-  const formatTime = useCallback((timeString) => {
-    if (!timeString) return '';
-    try {
-      return new Date(timeString).toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      });
-    } catch {
-      return timeString;
-    }
-  }, []);
-
-  // View handler - uses task.passengers which is now correctly set
   const handleView = useCallback((task) => {
     const taskPassengers = task.passengers || [];
     const workersAssigned = taskPassengers.length;
@@ -377,6 +393,14 @@ const FleetTasksPage = () => {
           <Row gutter={[16, 8]}>
             <Col xs={24} sm={12}><strong>Route:</strong> {task.pickupLocation || 'N/A'} → {task.dropLocation || 'N/A'}</Col>
             <Col xs={24} sm={12}><strong>Status:</strong> {getStatusTag(task.status)}</Col>
+          </Row>
+          <Row gutter={[16, 8]}>
+            <Col xs={24} sm={12}>
+              <strong>Pickup Time:</strong> {formatTime(task.plannedPickupTime)}
+            </Col>
+            <Col xs={24} sm={12}>
+              <strong>Drop Time:</strong> {formatTime(task.plannedDropTime)}
+            </Col>
           </Row>
           <Row gutter={[16, 8]}>
             <Col span={24}>
@@ -411,9 +435,8 @@ const FleetTasksPage = () => {
         </div>
       ),
     });
-  }, [getStatusTag]);
+  }, [getStatusTag, formatTime]);
 
-  // INSTANT: Memoized responsive columns
   const columns = useMemo(() => [
     {
       title: 'Date',
@@ -533,116 +556,80 @@ const FleetTasksPage = () => {
               type="primary" 
               icon={<PlusOutlined />} 
               onClick={handleCreate}
-              size="small"
-              className="w-full sm:w-auto"
+              size="middle"
             >
-              <span className="hidden sm:inline">Add Task</span>
-              <span className="sm:hidden">Add</span>
+              New Task
             </Button>
           </div>
         }
       >
-        {/* Search Section */}
-        <Card size="small" className="mb-4" bodyStyle={{ padding: '12px' }}>
-          <Form form={searchForm} layout="vertical" onFinish={handleSearch}>
-            <Row gutter={[12, 8]} align="bottom">
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item label="Search" name="searchText" className="mb-2">
-                  <Input 
-                    placeholder="Driver or vehicle..." 
-                    prefix={<SearchOutlined />} 
-                    allowClear 
-                    size="small"
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={6}>
-                <Form.Item label="Status" name="status" className="mb-2">
-                  <Select placeholder="Filter status" allowClear size="small">
-                    <Option value="PLANNED">Scheduled</Option>
-                    <Option value="ONGOING">In Progress</Option>
-                    <Option value="COMPLETED">Completed</Option>
-                    <Option value="CANCELLED">Cancelled</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={6}>
-                <Form.Item label="Date Range" name="dateRange" className="mb-2">
-                  <DatePicker.RangePicker 
-                    style={{ width: '100%' }} 
-                    format="DD/MM/YYYY" 
-                    size="small"
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={4}>
-                <Form.Item className="mb-2">
-                  <Button 
-                    type="primary" 
-                    htmlType="submit" 
-                    icon={<SearchOutlined />} 
-                    style={{ width: '100%' }}
-                    size="small"
-                  >
-                    <span className="hidden sm:inline">Search</span>
-                    <span className="sm:hidden">Go</span>
-                  </Button>
-                </Form.Item>
-              </Col>
-            </Row>
-          </Form>
-        </Card>
+        <Form
+          layout="vertical"
+          form={searchForm}
+          onFinish={handleSearch}
+          initialValues={{ searchText: '', status: '', dateRange: [] }}
+        >
+          <Row gutter={[12, 12]}>
+            <Col xs={24} sm={12} md={8} lg={6}>
+              <Form.Item name="searchText" label="Search">
+                <Input placeholder="Driver or Vehicle" prefix={<SearchOutlined />} allowClear />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8} lg={6}>
+              <Form.Item name="status" label="Status">
+                <Select placeholder="Select status" allowClear>
+                  <Option value="PLANNED">Scheduled</Option>
+                  <Option value="ONGOING">In Progress</Option>
+                  <Option value="COMPLETED">Completed</Option>
+                  <Option value="CANCELLED">Cancelled</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={8} lg={6}>
+              <Form.Item name="dateRange" label="Date Range">
+                <DatePicker.RangePicker className="w-full" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={8} lg={6} className="flex items-end">
+              <Space>
+                <Button type="primary" htmlType="submit">Search</Button>
+                <Button onClick={resetFilters}>Reset</Button>
+              </Space>
+            </Col>
+          </Row>
+        </Form>
 
-        <div className="mb-3 text-sm text-gray-600 px-1">
-          Showing {filteredData.length} of {fleetTasks.length} tasks
+        <div className="overflow-x-auto mt-4">
+          <Table
+            columns={columns}
+            dataSource={filteredData}
+            loading={loading}
+            rowKey={(record) => record._id || record.id}
+            pagination={{
+              current: currentPage,
+              pageSize,
+              total: filteredData.length,
+              showSizeChanger: true,
+              onChange: (page, size) => {
+                setCurrentPage(page);
+                setPageSize(size);
+              },
+            }}
+            size="middle"
+            className="rounded-lg"
+          />
         </div>
-
-        <Table 
-          columns={columns} 
-          dataSource={filteredData} 
-          loading={loading}
-          rowKey={(record) => record._id || record.id}
-          pagination={{
-            current: currentPage,
-            pageSize: pageSize,
-            total: filteredData.length,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
-            onChange: (page, size) => {
-              setCurrentPage(page);
-              if (size) setPageSize(size);
-            },
-            size: 'small',
-            responsive: true,
-          }}
-          size="small"
-          className="responsive-table"
-          style={{ overflowX: 'auto' }}
-        />
       </Card>
 
-      {/* Delete Modal */}
       <Modal
-        title="Confirm Delete"
+        title="Confirm Deletion"
         open={deleteModalVisible}
         onOk={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
         okText="Delete"
-        cancelText="Cancel"
-        okType="danger"
-        width={400}
+        okButtonProps={{ danger: true }}
       >
-        {taskToDelete && (
-          <div>
-            <p>Are you sure you want to delete this task?</p>
-            <div className="mt-2 p-2 bg-gray-50 rounded text-sm">
-              <div><strong>ID:</strong> {taskToDelete.id}</div>
-              <div><strong>Driver:</strong> {taskToDelete.displayDriverName}</div>
-              <div><strong>Route:</strong> {taskToDelete.pickupLocation} → {taskToDelete.dropLocation}</div>
-            </div>
-          </div>
-        )}
+        <p>Are you sure you want to delete this fleet task?</p>
       </Modal>
     </div>
   );

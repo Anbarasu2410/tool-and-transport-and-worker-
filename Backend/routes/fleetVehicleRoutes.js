@@ -1,6 +1,5 @@
-const express = require('express');
-const router = express.Router();
-const {
+import express from 'express';
+import {
   createFleetVehicle,
   getFleetVehicles,
   getFleetVehicleById,
@@ -8,7 +7,9 @@ const {
   getFleetVehiclesByStatus,
   updateFleetVehicle,
   deleteFleetVehicle
-} = require('../controllers/fleetVehicleController');
+} from '../controllers/fleetVehicleController.js';
+
+const router = express.Router();
 
 // Make sure all these functions are exported from your controller
 router.post('/', createFleetVehicle);
@@ -19,4 +20,4 @@ router.get('/status/:status', getFleetVehiclesByStatus);
 router.put('/:id', updateFleetVehicle);
 router.delete('/:id', deleteFleetVehicle);
 
-module.exports = router;
+export default router;

@@ -1,8 +1,7 @@
-// src/components/transport/BasicDetailsForm.jsx
 import React, { useState, useEffect } from 'react';
 import { Form, Select, DatePicker, TimePicker, Row, Col, Spin, Alert } from 'antd';
 import dayjs from 'dayjs';
-import { apiService } from '../../services/apiService';
+import apiService from '../../services/apiService';
 
 const { Option } = Select;
 

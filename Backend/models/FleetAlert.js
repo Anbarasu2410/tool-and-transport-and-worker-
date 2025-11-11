@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const fleetAlertSchema = new mongoose.Schema({
   id: {
@@ -9,15 +9,16 @@ const fleetAlertSchema = new mongoose.Schema({
   companyId: {
     type: Number,
     required: true,
-    ref: 'Company'
+    index: true
   },
   vehicleId: {
     type: Number,
-    ref: 'FleetVehicle'
+    index: true
   },
   alertType: {
     type: String,
-    trim: true
+    trim: true,
+    index: true
   },
   alertMessage: {
     type: String,
@@ -25,15 +26,24 @@ const fleetAlertSchema = new mongoose.Schema({
   },
   alertDate: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    index: true
   },
   resolvedAt: {
-    type: Date
+    type: Date,
+    index: true
   },
   createdBy: {
     type: Number,
-    ref: 'User'
+    index: true
   }
+}, {
+  collection: 'fleetAlerts'
 });
 
-module.exports = mongoose.model('FleetAlert', fleetAlertSchema, 'fleetAlerts');
+// Add essential indexes
+fleetAlertSchema.index({ companyId: 1, alertDate: -1 });
+fleetAlertSchema.index({ vehicleId: 1, alertDate: -1 });
+fleetAlertSchema.index({ resolvedAt: 1, alertDate: -1 });
+
+export default mongoose.model('FleetAlert', fleetAlertSchema);

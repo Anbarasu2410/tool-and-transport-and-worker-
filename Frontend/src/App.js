@@ -6,6 +6,7 @@ import CompaniesPage from './pages/CompaniesPage';
 import FleetTasksPage from './pages/FleetTasksPage';
 import DriversPage from './pages/DriversPage';
 import VehiclesPage from './pages/VehiclesPage';
+import TaskPage from './pages/TaskPage'; // Import the TaskPage
 import TopHeader from './components/TopHeader';
 import SideNav from './components/SideNav';
 
@@ -77,8 +78,12 @@ function App() {
           </AppLayout>
         } />
         
-        {/* Remove the old home route since we're using "/" for home now */}
-        {/* <Route path="/home" element={...} /> */}
+        {/* Add the new Tasks route */}
+        <Route path="/tasks" element={
+          <AppLayout>
+            <TaskPage />
+          </AppLayout>
+        } />
         
         {/* Default route - redirect to home instead of login */}
         <Route path="*" element={<Navigate to="/" replace />} />

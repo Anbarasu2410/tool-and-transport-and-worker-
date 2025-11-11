@@ -1,323 +1,665 @@
-// controllers/fleetTaskPassengerController.js
-const FleetTaskPassenger = require('../models/FleetTaskPassenger');
-const Company = require('../models/Company');
-const FleetTask = require('../models/FleetTask');
-const Employee = require('../models/Employee');
+import FleetTaskPassenger from '../models/FleetTaskPassenger.js';
+import Company from '../models/Company.js';
+import FleetTask from '../models/FleetTask.js';
+import Employee from '../models/Employee.js';
 
-// Create new fleet task passenger
+/**
+ * Validates fleet task passenger input data with comprehensive business rules
+ * @param {Object} data - Fleet task passenger data to validate
+ * @returns {Array} Array of validation errors
+ */
+const validateFleetTaskPassengerInput = (data) => {
+  const { 
+    id, companyId, fleetTaskId, workerEmployeeId, employeeName,
+    pickupConfirmedAt, dropConfirmedAt, status 
+  } = data;
+  const errors = [];
+
+  // Required fields validation
+  if (!id) errors.push('Passenger ID is required');
+  if (!companyId) errors.push('Company ID is required');
+  if (!fleetTaskId) errors.push('Fleet task ID is required');
+  if (!workerEmployeeId) errors.push('Worker employee ID is required');
+
+  // Data type validation
+  if (id && isNaN(id)) errors.push('Passenger ID must be a number');
+  if (companyId && isNaN(companyId)) errors.push('Company ID must be a number');
+  if (fleetTaskId && isNaN(fleetTaskId)) errors.push('Fleet task ID must be a number');
+  if (workerEmployeeId && isNaN(workerEmployeeId)) errors.push('Worker employee ID must be a number');
+
+  // Employee name validation
+  if (employeeName && employeeName.trim().length === 0) {
+    errors.push('Employee name cannot be empty');
+  }
+  if (employeeName && employeeName.trim().length > 100) {
+    errors.push('Employee name must be less than 100 characters');
+  }
+
+  // Date validation
+  if (pickupConfirmedAt) {
+    const pickupDate = new Date(pickupConfirmedAt);
+    if (isNaN(pickupDate.getTime())) {
+      errors.push('Pickup confirmed date must be a valid date');
+    }
+  }
+
+  if (dropConfirmedAt) {
+    const dropDate = new Date(dropConfirmedAt);
+    if (isNaN(dropDate.getTime())) {
+      errors.push('Drop confirmed date must be a valid date');
+    }
+  }
+
+  // Status validation
+  const validStatuses = ['PLANNED', 'PICKED', 'DROPPED', 'ABSENT'];
+  if (status && !validStatuses.includes(status)) {
+    errors.push(`Status must be one of: ${validStatuses.join(', ')}`);
+  }
+
+  // Business logic validation
+  if (dropConfirmedAt && !pickupConfirmedAt) {
+    errors.push('Cannot have drop confirmation without pickup confirmation');
+  }
+
+  if (pickupConfirmedAt && dropConfirmedAt) {
+    const pickupTime = new Date(pickupConfirmedAt);
+    const dropTime = new Date(dropConfirmedAt);
+    if (dropTime <= pickupTime) {
+      errors.push('Drop time must be after pickup time');
+    }
+  }
+
+  return errors;
+};
+
+/**
+ * Normalizes fleet task passenger data for consistent storage
+ * @param {Object} data - Raw fleet task passenger data
+ * @returns {Object} Normalized fleet task passenger data
+ */
+const normalizeFleetTaskPassengerData = (data) => {
+  const normalized = { ...data };
+
+  // Type conversion
+  if (normalized.id) normalized.id = parseInt(normalized.id, 10);
+  if (normalized.companyId) normalized.companyId = parseInt(normalized.companyId, 10);
+  if (normalized.fleetTaskId) normalized.fleetTaskId = parseInt(normalized.fleetTaskId, 10);
+  if (normalized.workerEmployeeId) normalized.workerEmployeeId = parseInt(normalized.workerEmployeeId, 10);
+
+  // String sanitization
+  if (normalized.employeeName) normalized.employeeName = normalized.employeeName.trim().replace(/\s+/g, ' ');
+  if (normalized.employeeCode) normalized.employeeCode = normalized.employeeCode.trim();
+  if (normalized.department) normalized.department = normalized.department.trim();
+  if (normalized.notes) normalized.notes = normalized.notes.trim();
+
+  // Date handling with validation (FIXED: Proper timezone handling)
+  const formatDateTime = (dateString) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    return new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  };
+
+  if (normalized.pickupConfirmedAt) {
+    normalized.pickupConfirmedAt = formatDateTime(normalized.pickupConfirmedAt);
+  }
+
+  if (normalized.dropConfirmedAt) {
+    normalized.dropConfirmedAt = formatDateTime(normalized.dropConfirmedAt);
+  }
+
+  if (normalized.createdAt) {
+    const createDate = new Date(normalized.createdAt);
+    normalized.createdAt = isNaN(createDate.getTime()) ? new Date() : createDate;
+  } else {
+    normalized.createdAt = new Date();
+  }
+
+  // Default values
+  if (!normalized.status) normalized.status = 'PLANNED';
+  if (!normalized.employeeName) normalized.employeeName = 'Unknown Employee';
+  if (!normalized.employeeCode) normalized.employeeCode = '';
+  if (!normalized.department) normalized.department = '';
+
+  return normalized;
+};
+
+/**
+ * Validates referential integrity for related entities - REMOVED EMPLOYEE VALIDATION
+ * @param {number} companyId - Company ID to validate
+ * @param {number} fleetTaskId - Fleet task ID to validate
+ * @returns {Promise<Object>} Validation results
+ */
+const validateReferentialIntegrity = async (companyId, fleetTaskId) => {
+  const validationPromises = [
+    Company.findOne({ id: companyId }).select('_id name tenantCode').lean().exec(),
+    FleetTask.findOne({ id: fleetTaskId }).select('_id taskDate vehicleId driverId').lean().exec()
+  ];
+
+  const [company, fleetTask] = await Promise.all(validationPromises);
+
+  const errors = [];
+  if (!company) errors.push(`Company with ID ${companyId} does not exist`);
+  if (!fleetTask) errors.push(`Fleet task with ID ${fleetTaskId} does not exist`);
+
+  return { 
+    isValid: errors.length === 0, 
+    errors,
+    company,
+    fleetTask
+  };
+};
+
+/**
+ * Checks for fleet task passenger uniqueness constraints
+ * @param {number} passengerId - Passenger ID to check
+ * @returns {Promise<boolean>} True if passenger ID is unique
+ */
+const checkFleetTaskPassengerUniqueness = async (passengerId) => {
+  const existingPassenger = await FleetTaskPassenger.findOne({ id: passengerId })
+    .select('_id')
+    .lean()
+    .exec();
+
+  return !existingPassenger;
+};
+
+/**
+ * Generates passenger metadata based on passenger data
+ * @param {Object} passengerData - Passenger data for metadata generation
+ * @returns {Object} Passenger metadata
+ */
+const generatePassengerMetadata = (passengerData) => {
+  const metadata = {
+    journeyStatus: 'PENDING',
+    requiresAttention: false,
+    timeMetrics: {}
+  };
+
+  // Set journey status based on confirmation times
+  if (passengerData.pickupConfirmedAt && passengerData.dropConfirmedAt) {
+    metadata.journeyStatus = 'COMPLETED';
+  } else if (passengerData.pickupConfirmedAt) {
+    metadata.journeyStatus = 'IN_TRANSIT';
+  } else {
+    metadata.journeyStatus = 'PENDING';
+  }
+
+  // Calculate time metrics if both pickup and drop times are available
+  if (passengerData.pickupConfirmedAt && passengerData.dropConfirmedAt) {
+    const pickupTime = new Date(passengerData.pickupConfirmedAt);
+    const dropTime = new Date(passengerData.dropConfirmedAt);
+    const journeyDuration = Math.round((dropTime - pickupTime) / (1000 * 60)); // minutes
+    
+    metadata.timeMetrics = {
+      journeyDuration,
+      pickupTime: pickupTime.toISOString(),
+      dropTime: dropTime.toISOString()
+    };
+  }
+
+  // Set attention flag for overdue pickups
+  if (passengerData.status === 'PLANNED' && passengerData.createdAt) {
+    const createdTime = new Date(passengerData.createdAt);
+    const currentTime = new Date();
+    const hoursSinceCreation = (currentTime - createdTime) / (1000 * 60 * 60);
+    
+    if (hoursSinceCreation > 24) {
+      metadata.requiresAttention = true;
+    }
+  }
+
+  return metadata;
+};
+
+/**
+ * Creates a new fleet task passenger with comprehensive validation
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const createFleetTaskPassenger = async (req, res) => {
   try {
-    const { 
-      id, 
-      companyId, 
-      fleetTaskId, 
-      workerEmployeeId, 
-      employeeName,
-      employeeCode,
-      department,
-      pickupLocation,
-      dropLocation,
-      pickupConfirmedAt, 
-      dropConfirmedAt, 
-      status, 
-      notes, 
-      createdBy,
-      createdAt 
-    } = req.body;
+    console.log('👤 Executing fleet task passenger creation process...');
 
-    console.log('🟡 Creating fleet task passenger with data:', req.body);
-
-    // Validate required fields
-    if (!id || !companyId || !fleetTaskId || !workerEmployeeId) {
+    // Execute input validation
+    const validationErrors = validateFleetTaskPassengerInput(req.body);
+    if (validationErrors.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'ID, companyId, fleetTaskId, and workerEmployeeId are required fields'
+        message: validationErrors.join(', ')
       });
     }
 
-    // Validate ID is a number
-    if (isNaN(id) || isNaN(companyId) || isNaN(fleetTaskId) || isNaN(workerEmployeeId)) {
-      return res.status(400).json({
+    // Normalize input data
+    const normalizedData = normalizeFleetTaskPassengerData(req.body);
+
+    // Execute parallel validations
+    const [isPassengerIdUnique, referentialCheck] = await Promise.all([
+      checkFleetTaskPassengerUniqueness(normalizedData.id),
+      validateReferentialIntegrity(
+        normalizedData.companyId, 
+        normalizedData.fleetTaskId
+      )
+    ]);
+
+    // Handle uniqueness validation failure
+    if (!isPassengerIdUnique) {
+      return res.status(409).json({
         success: false,
-        message: 'ID, companyId, fleetTaskId, and workerEmployeeId must be numbers'
+        message: `Fleet task passenger with ID ${normalizedData.id} already exists`
       });
     }
 
-    // Check if company exists
-    const companyExists = await Company.findOne({ id: companyId });
-    if (!companyExists) {
+    // Handle referential integrity validation failure
+    if (!referentialCheck.isValid) {
       return res.status(400).json({
         success: false,
-        message: `Company with ID ${companyId} does not exist`
+        message: referentialCheck.errors.join(', ')
       });
     }
 
-    // Check if fleet task exists
-    const fleetTaskExists = await FleetTask.findOne({ id: fleetTaskId });
-    if (!fleetTaskExists) {
-      return res.status(400).json({
-        success: false,
-        message: `Fleet task with ID ${fleetTaskId} does not exist`
-      });
-    }
+    // Generate passenger metadata
+    const passengerMetadata = generatePassengerMetadata(normalizedData);
 
-    // Check if passenger already exists by ID
-    const existingPassengerById = await FleetTaskPassenger.findOne({ id: id });
-    if (existingPassengerById) {
-      return res.status(400).json({
-        success: false,
-        message: `Fleet task passenger with ID ${id} already exists`
-      });
-    }
+    // Prepare fleet task passenger document
+    const fleetTaskPassengerData = {
+      ...normalizedData,
+      metadata: passengerMetadata,
+      updatedAt: new Date()
+    };
 
-    // Create fleet task passenger
-    const fleetTaskPassenger = new FleetTaskPassenger({
-      id: parseInt(id),
-      companyId: parseInt(companyId),
-      fleetTaskId: parseInt(fleetTaskId),
-      workerEmployeeId: parseInt(workerEmployeeId),
-      employeeName: employeeName || 'Unknown Employee',
-      employeeCode: employeeCode || '',
-      department: department || '',
-      pickupLocation: pickupLocation || '',
-      dropLocation: dropLocation || '',
-      pickupConfirmedAt: pickupConfirmedAt ? new Date(pickupConfirmedAt) : null,
-      dropConfirmedAt: dropConfirmedAt ? new Date(dropConfirmedAt) : null,
-      status: status || 'PLANNED',
-      notes: notes ? notes.trim() : null,
-      createdBy: createdBy || 1,
-      createdAt: createdAt ? new Date(createdAt) : new Date()
-    });
+    console.log('✅ Fleet task passenger data validated, proceeding with creation...');
 
+    // Persist fleet task passenger document
+    const fleetTaskPassenger = new FleetTaskPassenger(fleetTaskPassengerData);
     const savedPassenger = await fleetTaskPassenger.save();
 
-    console.log('✅ Fleet task passenger created successfully:', savedPassenger);
+    console.log(`✅ Fleet task passenger creation successful: ${savedPassenger.employeeName} (ID: ${savedPassenger.id})`);
 
-    res.status(201).json({
+    // Return successful creation response
+    return res.status(201).json({
       success: true,
       message: 'Fleet task passenger created successfully',
-      data: savedPassenger
+      data: savedPassenger,
+      metadata: {
+        journeyStatus: passengerMetadata.journeyStatus,
+        requiresAttention: passengerMetadata.requiresAttention
+      }
     });
+
   } catch (error) {
-    console.error('❌ Error creating fleet task passenger:', error);
+    console.error('❌ Fleet task passenger creation process failed:', error);
     
+    // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         success: false,
-        message: 'Validation error',
+        message: 'Data validation error',
         errors: errors
       });
     }
     
+    // Handle duplicate key errors
     if (error.code === 11000) {
-      return res.status(400).json({
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(409).json({
         success: false,
-        message: `Fleet task passenger with this ID already exists`
+        message: `Fleet task passenger with this ${field} already exists`
       });
     }
 
-    res.status(500).json({
+    // Return generic server error response
+    return res.status(500).json({
       success: false,
-      message: 'Server error: ' + error.message
+      message: 'Server error during fleet task passenger creation: ' + error.message
     });
   }
 };
 
-// @desc    Get all fleet task passengers
-// @route   GET /api/fleet-task-passengers
-// @access  Public
+/**
+ * Retrieves all fleet task passengers with enhanced querying and related data
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const getFleetTaskPassengers = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 10,
+      limit = 1000,
       companyId,
       fleetTaskId,
-      status
+      workerEmployeeId,
+      status,
+      dateFrom,
+      dateTo
     } = req.query;
 
-    // Build filter object
+    console.log('🔍 Executing enhanced fleet task passenger retrieval process...');
+
+    // Build comprehensive filter object
     const filter = {};
-    if (companyId) filter.companyId = Number(companyId);
-    if (fleetTaskId) filter.fleetTaskId = Number(fleetTaskId);
+    
+    if (companyId) filter.companyId = parseInt(companyId, 10);
+    if (fleetTaskId) filter.fleetTaskId = parseInt(fleetTaskId, 10);
+    if (workerEmployeeId) filter.workerEmployeeId = parseInt(workerEmployeeId, 10);
     if (status) filter.status = status;
 
-    const passengers = await FleetTaskPassenger.find(filter)
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+    // Date range filtering
+    if (dateFrom || dateTo) {
+      filter.createdAt = {};
+      if (dateFrom) filter.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) filter.createdAt.$lte = new Date(dateTo);
+    }
 
-    const total = await FleetTaskPassenger.countDocuments(filter);
+    const skip = (page - 1) * limit;
 
-    console.log('✅ Fetched all fleet task passengers:', passengers.length);
-    
-    res.json({
+    // Execute optimized query with pagination
+    const [passengers, total] = await Promise.all([
+      FleetTaskPassenger.find(filter)
+        .select('id companyId fleetTaskId workerEmployeeId employeeName employeeCode status pickupConfirmedAt dropConfirmedAt metadata createdAt')
+        .limit(limit * 1)
+        .skip(skip)
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec(),
+      FleetTaskPassenger.countDocuments(filter)
+    ]);
+
+    // Enhanced: Get related data for each passenger
+    const passengersWithDetails = await Promise.all(
+      passengers.map(async (passenger) => {
+        const [company, fleetTask] = await Promise.all([
+          Company.findOne({ id: passenger.companyId }).select('name tenantCode').lean().exec(),
+          FleetTask.findOne({ id: passenger.fleetTaskId }).select('taskDate vehicleId driverId').lean().exec()
+        ]);
+
+        return {
+          ...passenger,
+          companyName: company ? company.name : 'Unknown Company',
+          tenantCode: company ? company.tenantCode : 'N/A',
+          taskDate: fleetTask ? fleetTask.taskDate : null,
+          vehicleId: fleetTask ? fleetTask.vehicleId : null,
+          driverId: fleetTask ? fleetTask.driverId : null
+        };
+      })
+    );
+
+    console.log(`✅ Enhanced fleet task passenger retrieval successful: ${passengers.length} passengers processed`);
+
+    // Return successful retrieval response
+    return res.json({
       success: true,
-      data: passengers,
+      data: passengersWithDetails,
       pagination: {
-        current: Number(page),
-        total,
-        pages: Math.ceil(total / limit)
-      }
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+        itemsPerPage: parseInt(limit)
+      },
+      timestamp: new Date().toISOString()
     });
+
   } catch (error) {
-    console.error('❌ Error fetching fleet task passengers:', error);
-    res.status(500).json({
+    console.error('❌ Enhanced fleet task passenger retrieval failed:', error);
+    return res.status(500).json({
       success: false,
-      message: 'Error fetching fleet task passengers: ' + error.message
+      message: 'Database error during fleet task passenger retrieval: ' + error.message,
+      timestamp: new Date().toISOString()
     });
   }
 };
 
-// @desc    Get fleet task passenger by ID
-// @route   GET /api/fleet-task-passengers/:id
-// @access  Public
+/**
+ * Retrieves specific fleet task passenger by ID with enhanced data
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const getFleetTaskPassengerById = async (req, res) => {
   try {
-    const passengerId = parseInt(req.params.id);
+    let passenger;
     
-    if (isNaN(passengerId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid passenger ID. Must be a number.'
-      });
+    // Handle both numeric ID and MongoDB ID
+    if (req.params.id.match(/^[0-9]+$/)) {
+      passenger = await FleetTaskPassenger.findOne({ id: parseInt(req.params.id, 10) });
+    } else {
+      passenger = await FleetTaskPassenger.findById(req.params.id);
     }
 
-    const passenger = await FleetTaskPassenger.findOne({ id: passengerId });
-    
+    // Handle passenger not found scenario
     if (!passenger) {
       return res.status(404).json({
         success: false,
-        message: `Fleet task passenger with ID ${passengerId} not found`
+        message: `Fleet task passenger with ID ${req.params.id} not found`
       });
     }
 
-    console.log('✅ Fetched fleet task passenger by ID:', passengerId);
-    
-    res.json({
+    console.log(`🔍 Executing fleet task passenger retrieval for ID: ${req.params.id}`);
+
+    // Enhanced: Get related data
+    const [company, fleetTask] = await Promise.all([
+      Company.findOne({ id: passenger.companyId }).select('name tenantCode').lean().exec(),
+      FleetTask.findOne({ id: passenger.fleetTaskId }).select('taskDate vehicleId driverId pickupLocation dropLocation').lean().exec()
+    ]);
+
+    const passengerWithDetails = {
+      ...passenger.toObject(),
+      companyName: company ? company.name : 'Unknown Company',
+      tenantCode: company ? company.tenantCode : 'N/A',
+      taskDetails: fleetTask ? {
+        taskDate: fleetTask.taskDate,
+        vehicleId: fleetTask.vehicleId,
+        driverId: fleetTask.driverId,
+        pickupLocation: fleetTask.pickupLocation,
+        dropLocation: fleetTask.dropLocation
+      } : null
+    };
+
+    console.log(`✅ Fleet task passenger retrieval successful: ${passenger.employeeName}`);
+
+    // Return successful retrieval response
+    return res.json({
       success: true,
-      data: passenger
+      data: passengerWithDetails
     });
+
   } catch (error) {
-    console.error('❌ Error fetching fleet task passenger:', error);
-    res.status(500).json({
+    console.error(`❌ Fleet task passenger retrieval failed for ID ${req.params.id}:`, error);
+    return res.status(500).json({
       success: false,
-      message: 'Error fetching fleet task passenger: ' + error.message
+      message: 'Database error during fleet task passenger retrieval: ' + error.message
     });
   }
 };
 
-// @desc    Get fleet task passengers by task ID
-// @route   GET /api/fleet-task-passengers/task/:taskId
-// @access  Public
+/**
+ * Retrieves fleet task passengers by task ID with enhanced data
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const getFleetTaskPassengersByTaskId = async (req, res) => {
   try {
-    const taskId = parseInt(req.params.taskId);
+    let taskId;
     
-    if (isNaN(taskId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid task ID. Must be a number.'
-      });
+    // Handle both numeric ID and MongoDB ID
+    if (req.params.taskId.match(/^[0-9]+$/)) {
+      taskId = parseInt(req.params.taskId, 10);
+    } else {
+      // If it's a MongoDB ID, find the task first to get numeric ID
+      const task = await FleetTask.findById(req.params.taskId).select('id').lean().exec();
+      if (!task) {
+        return res.status(404).json({
+          success: false,
+          message: `Fleet task with ID ${req.params.taskId} not found`
+        });
+      }
+      taskId = task.id;
     }
 
-    // Check if fleet task exists
-    const fleetTaskExists = await FleetTask.findOne({ id: taskId });
-    if (!fleetTaskExists) {
+    console.log(`🔍 Executing passenger retrieval for task ID: ${taskId}`);
+
+    // Execute parallel validations and query
+    const [fleetTask, passengers] = await Promise.all([
+      FleetTask.findOne({ id: taskId })
+        .select('id taskDate vehicleId driverId pickupLocation dropLocation companyId')
+        .lean()
+        .exec(),
+      FleetTaskPassenger.find({ fleetTaskId: taskId })
+        .select('id workerEmployeeId employeeName employeeCode status pickupConfirmedAt dropConfirmedAt metadata createdAt')
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec()
+    ]);
+
+    // Handle fleet task not found scenario
+    if (!fleetTask) {
       return res.status(404).json({
         success: false,
         message: `Fleet task with ID ${taskId} not found`
       });
     }
 
-    const passengers = await FleetTaskPassenger.find({ fleetTaskId: taskId })
-      .sort({ createdAt: -1 });
-    
-    console.log('✅ Fetched passengers for task ID:', taskId, 'Count:', passengers.length);
-    
-    res.json({
+    console.log(`✅ Enhanced task passenger retrieval successful: ${passengers.length} passengers found`);
+
+    // Return successful retrieval response
+    return res.json({
       success: true,
       count: passengers.length,
       task: {
-        id: fleetTaskExists.id,
-        taskDate: fleetTaskExists.taskDate,
-        vehicleId: fleetTaskExists.vehicleId
+        id: fleetTask.id,
+        taskDate: fleetTask.taskDate,
+        vehicleId: fleetTask.vehicleId,
+        driverId: fleetTask.driverId,
+        pickupLocation: fleetTask.pickupLocation,
+        dropLocation: fleetTask.dropLocation,
+        companyId: fleetTask.companyId
       },
       data: passengers
     });
+
   } catch (error) {
-    console.error('❌ Error fetching passengers by task ID:', error);
-    res.status(500).json({
+    console.error('❌ Enhanced task passenger retrieval failed:', error);
+    return res.status(500).json({
       success: false,
-      message: 'Error fetching passengers: ' + error.message
+      message: 'Database error during task passenger retrieval: ' + error.message
     });
   }
 };
 
-// @desc    Get fleet task passengers by company
-// @route   GET /api/fleet-task-passengers/company/:companyId
-// @access  Public
+/**
+ * Retrieves fleet task passengers by company ID with enhanced data
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const getFleetTaskPassengersByCompany = async (req, res) => {
   try {
-    const companyId = parseInt(req.params.companyId);
+    let companyId;
     
-    if (isNaN(companyId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid company ID. Must be a number.'
-      });
+    // Handle both numeric ID and MongoDB ID
+    if (req.params.companyId.match(/^[0-9]+$/)) {
+      companyId = parseInt(req.params.companyId, 10);
+    } else {
+      // If it's a MongoDB ID, find the company first to get numeric ID
+      const company = await Company.findById(req.params.companyId).select('id').lean().exec();
+      if (!company) {
+        return res.status(404).json({
+          success: false,
+          message: `Company with ID ${req.params.companyId} not found`
+        });
+      }
+      companyId = company.id;
     }
 
-    // Check if company exists
-    const companyExists = await Company.findOne({ id: companyId });
-    if (!companyExists) {
+    console.log(`🔍 Executing passenger retrieval for company ID: ${companyId}`);
+
+    // Execute parallel validations and query
+    const [company, passengers] = await Promise.all([
+      Company.findOne({ id: companyId }).select('name tenantCode').lean().exec(),
+      FleetTaskPassenger.find({ companyId: companyId })
+        .select('id fleetTaskId workerEmployeeId employeeName employeeCode status pickupConfirmedAt dropConfirmedAt createdAt')
+        .sort({ createdAt: -1 })
+        .lean()
+        .exec()
+    ]);
+
+    // Handle company not found scenario
+    if (!company) {
       return res.status(404).json({
         success: false,
         message: `Company with ID ${companyId} not found`
       });
     }
 
-    const passengers = await FleetTaskPassenger.find({ companyId: companyId })
-      .sort({ createdAt: -1 });
-    
-    console.log('✅ Fetched passengers for company ID:', companyId, 'Count:', passengers.length);
-    
-    res.json({
+    console.log(`✅ Enhanced company passenger retrieval successful: ${passengers.length} passengers found`);
+
+    // Return successful retrieval response
+    return res.json({
       success: true,
       count: passengers.length,
       company: {
-        id: companyExists.id,
-        name: companyExists.name,
-        tenantCode: companyExists.tenantCode
+        id: companyId,
+        name: company.name,
+        tenantCode: company.tenantCode
       },
       data: passengers
     });
+
   } catch (error) {
-    console.error('❌ Error fetching passengers by company:', error);
-    res.status(500).json({
+    console.error('❌ Enhanced company passenger retrieval failed:', error);
+    return res.status(500).json({
       success: false,
-      message: 'Error fetching passengers: ' + error.message
+      message: 'Database error during company passenger retrieval: ' + error.message
     });
   }
 };
 
-// @desc    Update fleet task passenger
-// @route   PUT /api/fleet-task-passengers/:id
-// @access  Public
+/**
+ * Updates existing fleet task passenger with comprehensive validation
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const updateFleetTaskPassenger = async (req, res) => {
   try {
-    const passengerId = parseInt(req.params.id);
+    let passengerId;
     
-    if (isNaN(passengerId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid passenger ID. Must be a number.'
-      });
+    // Handle both numeric ID and MongoDB ID
+    if (req.params.id.match(/^[0-9]+$/)) {
+      passengerId = parseInt(req.params.id, 10);
+    } else {
+      // If it's a MongoDB ID, find the passenger first to get numeric ID
+      const passenger = await FleetTaskPassenger.findById(req.params.id).select('id').exec();
+      if (!passenger) {
+        return res.status(404).json({
+          success: false,
+          message: `Fleet task passenger with ID ${req.params.id} not found`
+        });
+      }
+      passengerId = passenger.id;
     }
 
-    // Check if passenger exists
-    const existingPassenger = await FleetTaskPassenger.findOne({ id: passengerId });
+    console.log(`✏️ Executing fleet task passenger update process for ID: ${passengerId}`);
+
+    // Normalize update data with proper date handling
+    const updateData = normalizeFleetTaskPassengerData(req.body);
+    updateData.updatedAt = new Date();
+
+    // Execute parallel validations
+    const [existingPassenger, referentialCheck] = await Promise.all([
+      FleetTaskPassenger.findOne({ id: passengerId }).exec(),
+      (updateData.companyId || updateData.fleetTaskId) ? 
+        validateReferentialIntegrity(
+          updateData.companyId || existingPassenger?.companyId,
+          updateData.fleetTaskId || existingPassenger?.fleetTaskId
+        ) : 
+        Promise.resolve({ isValid: true, errors: [] })
+    ]);
+
+    // Verify passenger exists
     if (!existingPassenger) {
       return res.status(404).json({
         success: false,
@@ -325,148 +667,168 @@ const updateFleetTaskPassenger = async (req, res) => {
       });
     }
 
-    // Prepare update data
-    const updateData = { ...req.body };
-
-    // Validate and parse IDs
-    if (updateData.companyId) {
-      if (isNaN(updateData.companyId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Company ID must be a number'
-        });
-      }
-      const companyExists = await Company.findOne({ id: updateData.companyId });
-      if (!companyExists) {
-        return res.status(400).json({
-          success: false,
-          message: `Company with ID ${updateData.companyId} does not exist`
-        });
-      }
-      updateData.companyId = parseInt(updateData.companyId);
+    // Handle referential integrity validation failure
+    if (!referentialCheck.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: referentialCheck.errors.join(', ')
+      });
     }
 
-    if (updateData.fleetTaskId) {
-      if (isNaN(updateData.fleetTaskId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Fleet task ID must be a number'
-        });
-      }
-      const fleetTaskExists = await FleetTask.findOne({ id: updateData.fleetTaskId });
-      if (!fleetTaskExists) {
-        return res.status(400).json({
-          success: false,
-          message: `Fleet task with ID ${updateData.fleetTaskId} does not exist`
-        });
-      }
-      updateData.fleetTaskId = parseInt(updateData.fleetTaskId);
+    // Generate updated metadata if relevant fields changed
+    const metadataFields = ['pickupConfirmedAt', 'dropConfirmedAt', 'status'];
+    const shouldUpdateMetadata = metadataFields.some(field => updateData[field] !== undefined);
+    
+    if (shouldUpdateMetadata) {
+      const mergedData = { ...existingPassenger.toObject(), ...updateData };
+      updateData.metadata = { 
+        ...existingPassenger.metadata, 
+        ...generatePassengerMetadata(mergedData) 
+      };
     }
 
-    if (updateData.workerEmployeeId) {
-      if (isNaN(updateData.workerEmployeeId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Worker employee ID must be a number'
-        });
-      }
-      updateData.workerEmployeeId = parseInt(updateData.workerEmployeeId);
+    let updatedPassenger;
+    
+    // Update based on ID type
+    if (req.params.id.match(/^[0-9]+$/)) {
+      updatedPassenger = await FleetTaskPassenger.findOneAndUpdate(
+        { id: passengerId },
+        updateData,
+        { 
+          new: true, 
+          runValidators: true,
+          context: 'query'
+        }
+      );
+    } else {
+      updatedPassenger = await FleetTaskPassenger.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { 
+          new: true, 
+          runValidators: true,
+          context: 'query'
+        }
+      );
     }
 
-    // Parse date fields
-    if (updateData.pickupConfirmedAt) {
-      updateData.pickupConfirmedAt = new Date(updateData.pickupConfirmedAt);
-    }
-    if (updateData.dropConfirmedAt) {
-      updateData.dropConfirmedAt = new Date(updateData.dropConfirmedAt);
-    }
+    console.log(`✅ Fleet task passenger update successful: ${updatedPassenger.employeeName}`);
 
-    // Update the passenger
-    const passenger = await FleetTaskPassenger.findOneAndUpdate(
-      { id: passengerId },
-      updateData,
-      { 
-        new: true, 
-        runValidators: true
-      }
-    );
-
-    console.log('✅ Updated fleet task passenger:', passengerId);
-
-    res.json({
+    // Return successful update response
+    return res.json({
       success: true,
       message: 'Fleet task passenger updated successfully',
-      data: passenger
+      data: updatedPassenger
     });
+
   } catch (error) {
-    console.error('❌ Error updating fleet task passenger:', error);
+    console.error(`❌ Fleet task passenger update process failed for ID ${req.params.id}:`, error);
     
+    // Handle Mongoose validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
         success: false,
-        message: 'Validation error',
+        message: 'Data validation error during update',
         errors: errors
       });
     }
 
-    res.status(400).json({
+    return res.status(400).json({
       success: false,
-      message: 'Error updating fleet task passenger: ' + error.message
+      message: 'Update process failed: ' + error.message
     });
   }
 };
 
-// @desc    Delete fleet task passenger
-// @route   DELETE /api/fleet-task-passengers/:id
-// @access  Public
+/**
+ * Deletes fleet task passenger by ID with proper validation
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const deleteFleetTaskPassenger = async (req, res) => {
   try {
-    const passengerId = parseInt(req.params.id);
+    let deletedPassenger;
     
-    if (isNaN(passengerId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid passenger ID. Must be a number.'
-      });
+    // Handle both numeric ID and MongoDB ID
+    if (req.params.id.match(/^[0-9]+$/)) {
+      deletedPassenger = await FleetTaskPassenger.findOneAndDelete({ id: parseInt(req.params.id, 10) });
+    } else {
+      deletedPassenger = await FleetTaskPassenger.findByIdAndDelete(req.params.id);
     }
 
-    const passenger = await FleetTaskPassenger.findOneAndDelete({ id: passengerId });
-
-    if (!passenger) {
+    // Handle passenger not found scenario
+    if (!deletedPassenger) {
       return res.status(404).json({
         success: false,
-        message: `Fleet task passenger with ID ${passengerId} not found`
+        message: `Fleet task passenger with ID ${req.params.id} not found`
       });
     }
 
-    console.log('✅ Deleted fleet task passenger:', passengerId);
+    console.log(`🗑️ Executing fleet task passenger deletion process for ID: ${req.params.id}`);
+    console.log(`✅ Fleet task passenger deletion successful: ${deletedPassenger.employeeName}`);
 
-    res.json({
+    // Return successful deletion response
+    return res.json({
       success: true,
       message: 'Fleet task passenger deleted successfully',
       deletedPassenger: {
-        id: passenger.id,
-        fleetTaskId: passenger.fleetTaskId,
-        workerEmployeeId: passenger.workerEmployeeId,
-        createdAt: passenger.createdAt
+        id: deletedPassenger.id,
+        fleetTaskId: deletedPassenger.fleetTaskId,
+        workerEmployeeId: deletedPassenger.workerEmployeeId,
+        employeeName: deletedPassenger.employeeName,
+        createdAt: deletedPassenger.createdAt
       }
     });
+
   } catch (error) {
-    console.error('❌ Error deleting fleet task passenger:', error);
-    res.status(500).json({
+    console.error(`❌ Fleet task passenger deletion process failed for ID ${req.params.id}:`, error);
+    return res.status(500).json({
       success: false,
-      message: 'Error deleting fleet task passenger: ' + error.message
+      message: 'Database error during fleet task passenger deletion: ' + error.message
     });
   }
 };
 
-module.exports = {
+/**
+ * Deletes all fleet task passengers by task ID
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
+const deleteFleetTaskPassengersByTaskId = async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.taskId, 10);
+    
+    console.log(`🗑️ Executing bulk passenger deletion for task ID: ${taskId}`);
+
+    const result = await FleetTaskPassenger.deleteMany({ fleetTaskId: taskId });
+
+    console.log(`✅ Bulk passenger deletion successful: ${result.deletedCount} passengers deleted`);
+
+    return res.json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} passengers for task ${taskId}`,
+      deletedCount: result.deletedCount
+    });
+
+  } catch (error) {
+    console.error(`❌ Bulk passenger deletion failed for task ID ${req.params.taskId}:`, error);
+    return res.status(500).json({
+      success: false,
+      message: 'Database error during bulk passenger deletion: ' + error.message
+    });
+  }
+};
+
+export {
   createFleetTaskPassenger,
   getFleetTaskPassengers,
   getFleetTaskPassengerById,
   getFleetTaskPassengersByTaskId,
   getFleetTaskPassengersByCompany,
   updateFleetTaskPassenger,
-  deleteFleetTaskPassenger
+  deleteFleetTaskPassenger,
+  deleteFleetTaskPassengersByTaskId
 };

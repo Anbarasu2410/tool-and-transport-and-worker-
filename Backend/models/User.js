@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
   id: {
@@ -10,22 +10,28 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    lowercase: true,
-    trim: true
+    trim: true,
+    lowercase: true
   },
-  name: {
+  passwordHash: {
+    type: String,
+    required: true
+  },
+  tenantCode: {
     type: String,
     required: true,
     trim: true
   },
-  isActive: {  // Changed from is_active to isActive
+  isActive: {
     type: Boolean,
     default: true
-  },
-  createdAt: {  // Changed from created_at to createdAt
-    type: Date,
-    default: Date.now
   }
+}, {
+  timestamps: true
 });
 
-module.exports = mongoose.model('User', userSchema);
+// Index for better query performance
+userSchema.index({ email: 1 });
+userSchema.index({ tenantCode: 1 });
+
+export default mongoose.model('User', userSchema);

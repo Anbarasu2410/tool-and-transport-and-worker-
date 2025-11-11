@@ -1,155 +1,239 @@
-const Company = require('../models/Company');
+import Company from '../models/Company.js';
 
-// @desc    Create a new company
-// @route   POST /api/companies
-// @access  Public
+/**
+ * Validates company input data with comprehensive checks
+ * @param {Object} data - Company data to validate
+ * @returns {Array} Array of validation errors
+ */
+const validateCompanyInput = (data) => {
+  const { name, tenantCode } = data;
+  const errors = [];
+
+  // Required fields validation
+  if (!name || !tenantCode) {
+    errors.push('Name and tenantCode are required fields');
+  }
+
+  // String content validation
+  if (name && name.trim().length === 0) {
+    errors.push('Company name cannot be empty');
+  }
+
+  if (tenantCode && tenantCode.trim().length === 0) {
+    errors.push('Tenant code cannot be empty');
+  }
+
+  // Length validation for security
+  if (name && name.trim().length > 100) {
+    errors.push('Company name must be less than 100 characters');
+  }
+
+  if (tenantCode && tenantCode.trim().length > 20) {
+    errors.push('Tenant code must be less than 20 characters');
+  }
+
+  return errors;
+};
+
+/**
+ * Normalizes and sanitizes company data for consistent storage
+ * @param {Object} data - Raw company data
+ * @returns {Object} Normalized company data
+ */
+const normalizeCompanyData = (data) => {
+  const normalized = { ...data };
+
+  if (normalized.name) {
+    normalized.name = normalized.name.trim().replace(/\s+/g, ' ');
+  }
+
+  if (normalized.tenantCode) {
+    normalized.tenantCode = normalized.tenantCode.toUpperCase().trim().replace(/[^A-Z0-9_-]/g, '');
+  }
+
+  if (normalized.contactEmail) {
+    normalized.contactEmail = normalized.contactEmail.toLowerCase().trim();
+  }
+
+  if (normalized.address) {
+    normalized.address = normalized.address.trim();
+  }
+
+  if (normalized.contactPhone) {
+    normalized.contactPhone = normalized.contactPhone.trim();
+  }
+
+  return normalized;
+};
+
+/**
+ * Handles Mongoose-specific errors and returns appropriate responses
+ * @param {Error} error - Mongoose error object
+ * @returns {Object|null} Formatted error response or null
+ */
+const handleMongooseError = (error) => {
+  // Validation errors
+  if (error.name === 'ValidationError') {
+    const errors = Object.values(error.errors).map(err => err.message);
+    return {
+      status: 400,
+      response: {
+        success: false,
+        message: 'Validation error',
+        errors
+      }
+    };
+  }
+
+  // Duplicate key errors
+  if (error.code === 11000) {
+    const field = Object.keys(error.keyPattern)[0];
+    return {
+      status: 400,
+      response: {
+        success: false,
+        message: `Company with this ${field} already exists`
+      }
+    };
+  }
+
+  // Cast errors (invalid ObjectId, etc.)
+  if (error.name === 'CastError') {
+    return {
+      status: 400,
+      response: {
+        success: false,
+        message: `Invalid ${error.path}: ${error.value}`
+      }
+    };
+  }
+
+  return null;
+};
+
+/**
+ * Creates a new company with comprehensive validation and error handling
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const createCompany = async (req, res) => {
   try {
-    const { id, name, tenantCode, createdAt } = req.body;
+    const { name, tenantCode, address, contactEmail, contactPhone } = req.body;
+
+    console.log('Received company data:', req.body);
 
     // Validate required fields
-    if (!id || !name || !tenantCode) {
+    if (!name || !tenantCode) {
       return res.status(400).json({
         success: false,
-        message: 'ID, name, and tenantCode are required fields'
+        message: 'Company name and tenant code are required'
       });
     }
 
-    // Validate ID is a number
-    if (isNaN(id)) {
+    // Execute input validation
+    const validationErrors = validateCompanyInput(req.body);
+    if (validationErrors.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'ID must be a number'
+        message: validationErrors.join(', ')
       });
     }
 
-    // Validate name is not empty
-    if (name.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Company name cannot be empty'
-      });
-    }
-
-    // Validate tenantCode is not empty
-    if (tenantCode.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tenant code cannot be empty'
-      });
-    }
-
-    // Check if company already exists by ID
-    const existingCompanyById = await Company.findOne({ id: id });
-    if (existingCompanyById) {
-      return res.status(400).json({
-        success: false,
-        message: `Company with ID ${id} already exists`
-      });
-    }
-
-    // Check if company already exists by tenantCode
-    const existingCompanyByTenant = await Company.findOne({ 
-      tenantCode: tenantCode.toUpperCase().trim()
+    // Normalize and sanitize input data
+    const normalizedData = normalizeCompanyData({
+      name,
+      tenantCode,
+      address,
+      contactEmail,
+      contactPhone
     });
-    if (existingCompanyByTenant) {
+
+    // Check if tenant code already exists
+    const existingCompany = await Company.findOne({ tenantCode: normalizedData.tenantCode });
+    if (existingCompany) {
       return res.status(400).json({
         success: false,
-        message: `Company with tenant code ${tenantCode} already exists`
+        message: 'Tenant code already exists'
       });
     }
 
-    // Create company with createdAt timestamp
+    // Generate numeric ID
+    const lastCompany = await Company.findOne().sort({ id: -1 });
+    const newId = lastCompany ? lastCompany.id + 1 : 1;
+
     const company = new Company({
-      id: parseInt(id),
-      name: name.trim(),
-      tenantCode: tenantCode.toUpperCase().trim(),
-      createdAt: createdAt ? new Date(createdAt) : new Date()
+      id: newId,
+      name: normalizedData.name,
+      tenantCode: normalizedData.tenantCode,
+      address: normalizedData.address,
+      contactEmail: normalizedData.contactEmail,
+      contactPhone: normalizedData.contactPhone
     });
 
     const savedCompany = await company.save();
-
+    console.log('Company saved successfully:', savedCompany);
+    
     res.status(201).json({
       success: true,
       message: 'Company created successfully',
       data: savedCompany
     });
   } catch (error) {
-    // Handle Mongoose validation errors
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: errors
-      });
-    }
-    
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({
-        success: false,
-        message: `Company with this ${field} already exists`
-      });
+    // Handle known Mongoose errors
+    const mongooseError = handleMongooseError(error);
+    if (mongooseError) {
+      return res.status(mongooseError.status).json(mongooseError.response);
     }
 
-    // Handle invalid date format
-    if (error.name === 'TypeError' && error.message.includes('Invalid time value')) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid date format for createdAt. Use ISO format (e.g., 2024-01-15T10:30:00.000Z)'
-      });
-    }
-
-    // Generic server error
+    console.error('Error creating company:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error: ' + error.message
+      message: 'Error creating company',
+      error: error.message
     });
   }
 };
 
-// @desc    Get all companies
-// @route   GET /api/companies
-// @access  Public
+/**
+ * Retrieves all companies with optimized query execution
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const getCompanies = async (req, res) => {
   try {
     const companies = await Company.find().sort({ createdAt: -1 });
     
     res.json({
       success: true,
-      count: companies.length,
-      data: companies
+      data: companies,
+      count: companies.length
     });
   } catch (error) {
+    console.error('Companies retrieval error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching companies: ' + error.message
+      message: 'Error fetching companies',
+      error: error.message
     });
   }
 };
 
-// @desc    Get company by ID
-// @route   GET /api/companies/:id
-// @access  Public
+/**
+ * Retrieves specific company by ID with robust error handling
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const getCompanyById = async (req, res) => {
   try {
-    const companyId = parseInt(req.params.id);
-    
-    if (isNaN(companyId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid company ID. Must be a number.'
-      });
-    }
+    const company = await Company.findById(req.params.id);
 
-    const company = await Company.findOne({ id: companyId });
-    
     if (!company) {
       return res.status(404).json({
         success: false,
-        message: `Company with ID ${companyId} not found`
+        message: 'Company not found'
       });
     }
 
@@ -158,30 +242,35 @@ const getCompanyById = async (req, res) => {
       data: company
     });
   } catch (error) {
+    // Handle known Mongoose errors
+    const mongooseError = handleMongooseError(error);
+    if (mongooseError) {
+      return res.status(mongooseError.status).json(mongooseError.response);
+    }
+
+    console.error(`Company retrieval error for ID ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching company: ' + error.message
+      message: 'Error fetching company',
+      error: error.message
     });
   }
 };
 
-// @desc    Get company by tenantCode
-// @route   GET /api/companies/tenant/:tenantCode
-// @access  Public
+/**
+ * Retrieves company by tenant code with input sanitization
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const getCompanyByTenantCode = async (req, res) => {
   try {
     const { tenantCode } = req.params;
 
-    if (!tenantCode || tenantCode.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tenant code is required'
-      });
-    }
-
-    const company = await Company.findOne({ 
-      tenantCode: tenantCode.toUpperCase().trim()
-    });
+    // Sanitize and normalize tenant code
+    const normalizedTenantCode = tenantCode.toUpperCase().trim().replace(/[^A-Z0-9_-]/g, '');
+    
+    const company = await Company.findOne({ tenantCode: normalizedTenantCode });
     
     if (!company) {
       return res.status(404).json({
@@ -195,159 +284,139 @@ const getCompanyByTenantCode = async (req, res) => {
       data: company
     });
   } catch (error) {
+    console.error(`Company retrieval error for tenant code ${req.params.tenantCode}:`, error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching company: ' + error.message
+      message: 'Error fetching company',
+      error: error.message
     });
   }
 };
 
-// @desc    Update company
-// @route   PUT /api/companies/:id
-// @access  Public
+/**
+ * Updates existing company with comprehensive validation and conflict checking
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const updateCompany = async (req, res) => {
   try {
-    const companyId = parseInt(req.params.id);
-    
-    if (isNaN(companyId)) {
+    const { name, tenantCode, address, contactEmail, contactPhone } = req.body;
+
+    // Normalize and validate update data
+    const updateData = normalizeCompanyData({
+      name,
+      tenantCode,
+      address,
+      contactEmail,
+      contactPhone,
+      updatedAt: Date.now()
+    });
+
+    // Validate business rules
+    if (updateData.name && updateData.name.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid company ID. Must be a number.'
+        message: 'Company name cannot be empty'
       });
     }
 
-    // Check if company exists
-    const existingCompany = await Company.findOne({ id: companyId });
-    if (!existingCompany) {
+    if (updateData.tenantCode && updateData.tenantCode.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tenant code cannot be empty'
+      });
+    }
+
+    // Check for tenant code conflicts if tenantCode is being updated
+    if (updateData.tenantCode) {
+      const existingCompanyWithTenantCode = await Company.findOne({
+        tenantCode: updateData.tenantCode,
+        _id: { $ne: req.params.id }
+      });
+
+      if (existingCompanyWithTenantCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'Tenant code already exists'
+        });
+      }
+    }
+
+    const updatedCompany = await Company.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedCompany) {
       return res.status(404).json({
         success: false,
-        message: `Company with ID ${companyId} not found`
+        message: 'Company not found'
       });
     }
-
-    // Prepare update data
-    const updateData = { ...req.body };
-
-    // If updating tenantCode, check if it's already taken by another company
-    if (updateData.tenantCode) {
-      if (updateData.tenantCode.trim().length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Tenant code cannot be empty'
-        });
-      }
-
-      updateData.tenantCode = updateData.tenantCode.toUpperCase().trim();
-      
-      const tenantCodeExists = await Company.findOne({
-        tenantCode: updateData.tenantCode,
-        id: { $ne: companyId } // Exclude current company
-      });
-      
-      if (tenantCodeExists) {
-        return res.status(400).json({
-          success: false,
-          message: `Tenant code '${updateData.tenantCode}' is already taken by another company`
-        });
-      }
-    }
-
-    // If updating name, trim it
-    if (updateData.name) {
-      if (updateData.name.trim().length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Company name cannot be empty'
-        });
-      }
-      updateData.name = updateData.name.trim();
-    }
-
-    // Update the company
-    const company = await Company.findOneAndUpdate(
-      { id: companyId },
-      updateData,
-      { 
-        new: true, 
-        runValidators: true,
-        context: 'query'
-      }
-    );
 
     res.json({
       success: true,
       message: 'Company updated successfully',
-      data: company
+      data: updatedCompany
     });
   } catch (error) {
-    // Handle Mongoose validation errors
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Validation error',
-        errors: errors
-      });
-    }
-    
-    // Handle duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({
-        success: false,
-        message: `Company with this ${field} already exists`
-      });
+    // Handle known Mongoose errors
+    const mongooseError = handleMongooseError(error);
+    if (mongooseError) {
+      return res.status(mongooseError.status).json(mongooseError.response);
     }
 
-    res.status(400).json({
+    console.error(`Company update error for ID ${req.params.id}:`, error);
+    res.status(500).json({
       success: false,
-      message: 'Error updating company: ' + error.message
+      message: 'Error updating company',
+      error: error.message
     });
   }
 };
 
-// @desc    Delete company
-// @route   DELETE /api/companies/:id
-// @access  Public
+/**
+ * Deletes company by ID with proper cleanup and response
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>}
+ */
 const deleteCompany = async (req, res) => {
   try {
-    const companyId = parseInt(req.params.id);
+    const deletedCompany = await Company.findByIdAndDelete(req.params.id);
     
-    if (isNaN(companyId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid company ID. Must be a number.'
-      });
-    }
-
-    const company = await Company.findOneAndDelete({ id: companyId });
-
-    if (!company) {
+    if (!deletedCompany) {
       return res.status(404).json({
         success: false,
-        message: `Company with ID ${companyId} not found`
+        message: 'Company not found'
       });
     }
 
     res.json({
       success: true,
       message: 'Company deleted successfully',
-      deletedCompany: {
-        id: company.id,
-        name: company.name,
-        tenantCode: company.tenantCode,
-        createdAt: company.createdAt
-      }
+      data: deletedCompany
     });
   } catch (error) {
+    // Handle known Mongoose errors
+    const mongooseError = handleMongooseError(error);
+    if (mongooseError) {
+      return res.status(mongooseError.status).json(mongooseError.response);
+    }
+
+    console.error(`Company deletion error for ID ${req.params.id}:`, error);
     res.status(500).json({
       success: false,
-      message: 'Error deleting company: ' + error.message
+      message: 'Error deleting company',
+      error: error.message
     });
   }
 };
 
-module.exports = {
+// ES6 Export
+export {
   createCompany,
   getCompanies,
   getCompanyById,
