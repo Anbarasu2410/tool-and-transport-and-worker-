@@ -1,6 +1,9 @@
+import { createTask } from "../services/taskService.js";
 import Task from '../models/Task.js';
 import Project from '../models/Project.js';
 import Company from '../models/Company.js';
+import FleetTaskTool from '../models/FleetTaskTool.js';
+import FleetTaskMaterial from '../models/FleetTaskMaterial.js';
 
 /**
  * Validates task input data
@@ -11,13 +14,11 @@ const validateTaskInput = (data) => {
   } = data;
   const errors = [];
 
-  // Required fields validation
-  if (!companyId) errors.push('Company ID is required');
-  if (!projectId) errors.push('Project ID is required');
+  // Required fields validation - only taskName and taskType are required
   if (!taskName) errors.push('Task name is required');
   if (!taskType) errors.push('Task type is required');
 
-  // Data type validation
+  // Data type validation (only if provided)
   if (companyId && isNaN(companyId)) errors.push('Company ID must be a number');
   if (projectId && isNaN(projectId)) errors.push('Project ID must be a number');
 
@@ -69,7 +70,7 @@ const validateTaskInput = (data) => {
 const normalizeTaskData = (data) => {
   const normalized = { ...data };
 
-  // Type conversion
+  // Type conversion (only if provided)
   if (normalized.companyId) normalized.companyId = parseInt(normalized.companyId, 10);
   if (normalized.projectId) normalized.projectId = parseInt(normalized.projectId, 10);
   if (normalized.createdBy) normalized.createdBy = parseInt(normalized.createdBy, 10);
@@ -100,19 +101,34 @@ const normalizeTaskData = (data) => {
 };
 
 /**
- * Validates referential integrity
+ * Validates referential integrity (only if companyId and projectId are provided)
  */
 const validateReferentialIntegrity = async (companyId, projectId) => {
-  const validationPromises = [
-    Company.findOne({ id: companyId }).select('_id name').lean().exec(),
-    Project.findOne({ id: projectId }).select('_id name').lean().exec()
-  ];
+  const errors = [];
+  const validationPromises = [];
+
+  // Only validate company if companyId is provided
+  if (companyId) {
+    validationPromises.push(
+      Company.findOne({ id: companyId }).select('_id name').lean().exec()
+    );
+  } else {
+    validationPromises.push(Promise.resolve(null));
+  }
+
+  // Only validate project if projectId is provided
+  if (projectId) {
+    validationPromises.push(
+      Project.findOne({ id: projectId }).select('_id name').lean().exec()
+    );
+  } else {
+    validationPromises.push(Promise.resolve(null));
+  }
 
   const [company, project] = await Promise.all(validationPromises);
 
-  const errors = [];
-  if (!company) errors.push(`Company with ID ${companyId} does not exist`);
-  if (!project) errors.push(`Project with ID ${projectId} does not exist`);
+  if (companyId && !company) errors.push(`Company with ID ${companyId} does not exist`);
+  if (projectId && !project) errors.push(`Project with ID ${projectId} does not exist`);
 
   return { 
     isValid: errors.length === 0, 
@@ -155,8 +171,8 @@ const getAllTasks = async (req, res) => {
     const tasksWithDetails = await Promise.all(
       tasks.map(async (task) => {
         const [company, project] = await Promise.all([
-          Company.findOne({ id: task.companyId }),
-          Project.findOne({ id: task.projectId }),
+          task.companyId ? Company.findOne({ id: task.companyId }) : Promise.resolve(null),
+          task.projectId ? Project.findOne({ id: task.projectId }) : Promise.resolve(null),
         ]);
 
         const taskObj = task.toObject();
@@ -209,10 +225,10 @@ const getTaskById = async (req, res) => {
       });
     }
 
-    // Populate related data
+    // Populate related data (only if IDs exist)
     const [company, project] = await Promise.all([
-      Company.findOne({ id: task.companyId }),
-      Project.findOne({ id: task.projectId })
+      task.companyId ? Company.findOne({ id: task.companyId }) : Promise.resolve(null),
+      task.projectId ? Project.findOne({ id: task.projectId }) : Promise.resolve(null)
     ]);
 
     const taskObj = task.toObject();
@@ -239,96 +255,36 @@ const getTaskById = async (req, res) => {
 /**
  * POST /api/tasks - Create new task
  */
-const createTask = async (req, res) => {
+/**
+ * POST /api/tasks - Create new task
+ */
+/**
+ * POST /api/tasks - Create new task
+ */
+/**
+ * POST /api/tasks - Create new task
+ */
+const createTaskInfo = async (req, res) => {
   try {
-    console.log('🚀 Executing task creation process...');
-
-    // Input validation
-    const validationErrors = validateTaskInput(req.body);
-    if (validationErrors.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: validationErrors.join(', ')
-      });
-    }
-
-    // Normalize input data
-    const normalizedData = normalizeTaskData(req.body);
+    console.log("📨 Raw request body:", req.body);
     
-    console.log('📝 After normalization:', normalizedData);
-
-    // Generate new ID if not provided
-    if (!normalizedData.id) {
-      const lastTask = await Task.findOne().sort({ id: -1 });
-      normalizedData.id = lastTask ? lastTask.id + 1 : 1;
-    }
-
-    // Referential integrity validation
-    const referentialCheck = await validateReferentialIntegrity(
-      normalizedData.companyId, 
-      normalizedData.projectId
-    );
-
-    if (!referentialCheck.isValid) {
-      return res.status(400).json({
-        success: false,
-        message: referentialCheck.errors.join(', ')
-      });
-    }
-
-    // Create task
-    const taskData = {
-      ...normalizedData,
-      updatedAt: new Date()
-    };
-
-    const task = new Task(taskData);
-    const savedTask = await task.save();
-
-    // Populate response data
-    const [company, project] = await Promise.all([
-      Company.findOne({ id: savedTask.companyId }),
-      Project.findOne({ id: savedTask.projectId })
-    ]);
-
-    const taskObj = savedTask.toObject();
-
-    const responseData = {
-      ...taskObj,
-      companyName: company ? company.name : 'Unknown Company',
-      projectName: project ? project.name : 'Unknown Project'
-    };
-
-    console.log(`✅ Task creation successful: Task ${savedTask.id}`);
-
-    res.status(201).json({
-      success: true,
-      message: 'Task created successfully',
-      data: responseData
+    // Use your service to create the main task
+    const task = await createTask(req.body);
+    
+  
+    
+    res.status(201).json({ 
+      success: true, 
+      data: task,
+      message: 'Task created successfully'
     });
-
-  } catch (error) {
-    console.error('❌ Task creation process failed:', error);
     
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({
-        success: false,
-        message: 'Data validation error',
-        errors: errors
-      });
-    }
-    
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: 'Task with this ID already exists'
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: `Error creating task: ${error.message}`
+  } catch (err) {
+    console.error('❌ Task creation process failed:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message,
+      message: 'Failed to create task'
     });
   }
 };
@@ -365,8 +321,8 @@ const updateTask = async (req, res) => {
       });
     }
 
-    // Populate response
-    const company = await Company.findOne({ id: updatedTask.companyId });
+    // Populate response (only if companyId exists)
+    const company = updatedTask.companyId ? await Company.findOne({ id: updatedTask.companyId }) : null;
     const taskObj = updatedTask.toObject();
     
     const taskWithCompany = {
@@ -458,7 +414,7 @@ const getTasksByProject = async (req, res) => {
 
     const tasksWithDetails = await Promise.all(
       tasks.map(async (task) => {
-        const company = await Company.findOne({ id: task.companyId });
+        const company = task.companyId ? await Company.findOne({ id: task.companyId }) : null;
 
         const taskObj = task.toObject();
 
@@ -532,8 +488,8 @@ const getTasksByStatus = async (req, res) => {
     const tasksWithDetails = await Promise.all(
       tasks.map(async (task) => {
         const [company, project] = await Promise.all([
-          Company.findOne({ id: task.companyId }),
-          Project.findOne({ id: task.projectId }),
+          task.companyId ? Company.findOne({ id: task.companyId }) : Promise.resolve(null),
+          task.projectId ? Project.findOne({ id: task.projectId }) : Promise.resolve(null),
         ]);
 
         const taskObj = task.toObject();
@@ -609,8 +565,8 @@ const getTasksByType = async (req, res) => {
     const tasksWithDetails = await Promise.all(
       tasks.map(async (task) => {
         const [company, project] = await Promise.all([
-          Company.findOne({ id: task.companyId }),
-          Project.findOne({ id: task.projectId }),
+          task.companyId ? Company.findOne({ id: task.companyId }) : Promise.resolve(null),
+          task.projectId ? Project.findOne({ id: task.projectId }) : Promise.resolve(null),
         ]);
 
         const taskObj = task.toObject();
@@ -648,7 +604,7 @@ const getTasksByType = async (req, res) => {
 export {
   getAllTasks,
   getTaskById,
-  createTask,
+  createTaskInfo,
   updateTask,
   deleteTask,
   getTasksByProject,

@@ -7,7 +7,7 @@ const WorkTaskForm = ({ form }) => (
   <Card title="👷 Work Task Details" size="small" className="mb-4">
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Form.Item 
-        name={['additional_data', 'workType']} 
+        name={['additionalData', 'workType']} 
         label="Work Type"
       >
         <Select placeholder="Select work type">
@@ -20,7 +20,7 @@ const WorkTaskForm = ({ form }) => (
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'priority']} 
+        name={['additionalData', 'priority']} 
         label="Priority"
       >
         <Select placeholder="Select priority">
@@ -32,7 +32,7 @@ const WorkTaskForm = ({ form }) => (
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'estimatedHours']} 
+        name={['additionalData', 'estimatedHours']} 
         label="Estimated Hours"
       >
         <InputNumber 
@@ -44,7 +44,7 @@ const WorkTaskForm = ({ form }) => (
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'crewSize']} 
+        name={['additionalData', 'crewSize']} 
         label="Crew Size"
       >
         <InputNumber 

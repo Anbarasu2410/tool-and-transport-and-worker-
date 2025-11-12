@@ -2,7 +2,7 @@ import express from 'express';
 import {
   getAllTasks,
   getTaskById,
-  createTask,
+  createTaskInfo,
   updateTask,
   deleteTask,
   getTasksByProject,
@@ -15,7 +15,7 @@ const router = express.Router();
 // Task routes
 router.get('/', getAllTasks);
 router.get('/:id', getTaskById);
-router.post('/', createTask);
+router.post('/', createTaskInfo);
 router.put('/:id', updateTask);
 router.delete('/:id', deleteTask);
 router.get('/project/:projectId', getTasksByProject);

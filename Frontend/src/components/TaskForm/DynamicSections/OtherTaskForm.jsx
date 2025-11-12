@@ -6,7 +6,7 @@ const { TextArea } = Input;
 const OtherTaskForm = ({ form }) => (
   <Card title="📋 Additional Information" size="small" className="mb-4">
     <Form.Item 
-      name={['additional_data', 'customFields']} 
+      name={['additionalData', 'customFields']} 
       label="Additional Information"
     >
       <TextArea 

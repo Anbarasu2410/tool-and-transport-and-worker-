@@ -6,10 +6,12 @@ const fleetTaskSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  taskId: {
+    type: Number,
+  },
+
   companyId: {
     type: Number,
-    required: true,
-    index: true
   },
   projectId: {
     type: Number,

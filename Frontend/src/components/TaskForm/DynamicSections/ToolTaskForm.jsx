@@ -7,7 +7,7 @@ const ToolTaskForm = ({ form }) => (
   <Card title="🛠️ Tool Task Details" size="small" className="mb-4">
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Form.Item 
-        name={['additional_data', 'toolType']} 
+        name={['additionalData', 'toolType']} 
         label="Tool Type"
       >
         <Select placeholder="Select tool type">
@@ -20,14 +20,14 @@ const ToolTaskForm = ({ form }) => (
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'toolName']} 
+        name={['additionalData', 'toolName']} 
         label="Tool Name"
       >
         <Input placeholder="Enter tool name" />
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'condition']} 
+        name={['additionalData', 'condition']} 
         label="Condition"
       >
         <Select placeholder="Select tool condition">

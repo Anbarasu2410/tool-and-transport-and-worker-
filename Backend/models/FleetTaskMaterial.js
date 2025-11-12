@@ -1,24 +1,40 @@
-// models/FleetTaskMaterial.js
 import mongoose from 'mongoose';
 
 const fleetTaskMaterialSchema = new mongoose.Schema({
+  id:{
+     type: Number,
+  },
   fleetTaskId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'FleetTask',
+    type: Number,
     required: true
   },
+
   materialId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Material',
+    type: Number,
     required: true
   },
+  
   quantity: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 }, {
-  timestamps: true
+  collection: 'fleetTaskMaterials',
+  timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' }
 });
+
+
+
+
 
 const FleetTaskMaterial = mongoose.model('FleetTaskMaterial', fleetTaskMaterialSchema);
 export default FleetTaskMaterial;

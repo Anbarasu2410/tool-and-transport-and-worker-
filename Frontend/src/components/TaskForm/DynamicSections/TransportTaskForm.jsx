@@ -8,20 +8,29 @@ import {
   Card, 
   Space, 
   Button, 
-  List,
   Tag,
   Divider,
   Spin,
-  Alert
+  Alert,
+  Row,
+  Col,
+  Typography,
+  message
 } from 'antd';
 import { 
   PlusOutlined, 
-  MinusCircleOutlined 
+  MinusCircleOutlined,
+  CarOutlined,
+  ToolOutlined,
+  TeamOutlined,
+  CheckCircleOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 
 const { Option } = Select;
 const { TextArea } = Input;
+const { Text } = Typography;
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
@@ -37,6 +46,7 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [loadingTools, setLoadingTools] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
 
   // Fetch data when company changes
   useEffect(() => {
@@ -44,27 +54,27 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
       fetchDrivers(selectedCompany.id);
       fetchVehicles(selectedCompany.id);
     } else {
-      // Reset all data if no company selected
       setDrivers([]);
       setVehicles([]);
       setWorkers([]);
       setMaterials([]);
       setTools([]);
+      setSelectedVehicle(null);
     }
   }, [selectedCompany]);
 
-  // Fetch workers, materials, tools when transport type changes and company is selected
+  // Fetch workers, materials, tools when transport type changes
   useEffect(() => {
     if (selectedCompany?.id && transportType) {
       switch (transportType) {
-        case 'WORKER':
+        case 'WORKER_TRANSPORT':
           fetchWorkers(selectedCompany.id);
           break;
-        case 'MATERIAL':
-          fetchMaterials(selectedCompany.id);
+        case 'MATERIAL_TRANSPORT':
+          fetchMaterials();
           break;
-        case 'TOOL':
-          fetchTools(selectedCompany.id);
+        case 'TOOL_TRANSPORT':
+          fetchTools();
           break;
         default:
           break;
@@ -94,12 +104,14 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
   const fetchVehicles = async (companyId) => {
     setLoadingVehicles(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/vehicles/company/${companyId}`);
+      const response = await axios.get(`${API_BASE_URL}/fleet-vehicles/company/${companyId}`);
       let vehiclesData = [];
       if (Array.isArray(response.data)) {
         vehiclesData = response.data;
       } else if (response.data && Array.isArray(response.data.data)) {
         vehiclesData = response.data.data;
+      } else if (response.data && response.data.vehicles) {
+        vehiclesData = response.data.vehicles;
       }
       setVehicles(vehiclesData);
     } catch (error) {
@@ -113,13 +125,17 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
   const fetchWorkers = async (companyId) => {
     setLoadingWorkers(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/workers/company/${companyId}`);
+      const response = await axios.get(`${API_BASE_URL}/employees/workers`, {
+        params: { companyId, search: '', role: 'worker' }
+      });
+      
       let workersData = [];
-      if (Array.isArray(response.data)) {
-        workersData = response.data;
-      } else if (response.data && Array.isArray(response.data.data)) {
+      if (response.data && response.data.success && Array.isArray(response.data.data)) {
         workersData = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        workersData = response.data;
       }
+      
       setWorkers(workersData);
     } catch (error) {
       console.error('Error fetching workers:', error);
@@ -129,42 +145,107 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
     }
   };
 
-  const fetchMaterials = async (companyId) => {
+  const fetchMaterials = async () => {
     setLoadingMaterials(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/materials/company/${companyId}`);
+      console.log('Fetching materials from Materials collection');
+      const response = await axios.get(`${API_BASE_URL}/materials`);
+      console.log('Materials API response:', response.data);
+      
       let materialsData = [];
-      if (Array.isArray(response.data)) {
+      
+      if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        materialsData = response.data.data;
+      } else if (Array.isArray(response.data)) {
         materialsData = response.data;
       } else if (response.data && Array.isArray(response.data.data)) {
         materialsData = response.data.data;
       }
+      
+      console.log('Processed materials data:', materialsData);
       setMaterials(materialsData);
+      
+      if (materialsData.length === 0) {
+        message.warning('No materials found in database');
+      } else {
+        message.success(`Loaded ${materialsData.length} materials from database`);
+      }
     } catch (error) {
       console.error('Error fetching materials:', error);
+      message.error('Failed to load materials from database');
       setMaterials([]);
     } finally {
       setLoadingMaterials(false);
     }
   };
 
-  const fetchTools = async (companyId) => {
+  const fetchTools = async () => {
     setLoadingTools(true);
     try {
-      const response = await axios.get(`${API_BASE_URL}/tools/company/${companyId}`);
+      console.log('Fetching tools from Tools collection');
+      const response = await axios.get(`${API_BASE_URL}/tools`);
+      console.log('Tools API response:', response.data);
+      
       let toolsData = [];
-      if (Array.isArray(response.data)) {
+      
+      if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        toolsData = response.data.data;
+      } else if (Array.isArray(response.data)) {
         toolsData = response.data;
       } else if (response.data && Array.isArray(response.data.data)) {
         toolsData = response.data.data;
       }
+      
+      console.log('Processed tools data:', toolsData);
       setTools(toolsData);
+      
+      if (toolsData.length === 0) {
+        message.warning('No tools found in database');
+      } else {
+        message.success(`Loaded ${toolsData.length} tools from database`);
+      }
     } catch (error) {
       console.error('Error fetching tools:', error);
+      message.error('Failed to load tools from database');
       setTools([]);
     } finally {
       setLoadingTools(false);
     }
+  };
+
+  const handleVehicleChange = (vehicleId) => {
+    const vehicle = vehicles.find(v => v.id === vehicleId || v._id === vehicleId);
+    setSelectedVehicle(vehicle);
+  };
+
+  const getStatusTag = (status) => {
+    const statusConfig = {
+      'AVAILABLE': { color: 'green', icon: <CheckCircleOutlined /> },
+      'IN_SERVICE': { color: 'blue', icon: <CarOutlined /> },
+      'MAINTENANCE': { color: 'orange', icon: <WarningOutlined /> },
+      'OUT_OF_SERVICE': { color: 'red', icon: <WarningOutlined /> }
+    };
+    
+    const config = statusConfig[status] || { color: 'default', icon: null };
+    return (
+      <Tag color={config.color} icon={config.icon}>
+        {status?.replace('_', ' ') || 'UNKNOWN'}
+      </Tag>
+    );
+  };
+
+  const renderVehicleInfo = () => {
+    if (!selectedVehicle) return null;
+
+    return (
+      <Card size="small" title="Selected Vehicle Details" className="mt-3">
+        <Row gutter={[16, 8]}>
+          <Col span={12}><Text strong>Registration No:</Text><br /><Text>{selectedVehicle.registrationNo || 'N/A'}</Text></Col>
+          <Col span={12}><Text strong>Vehicle Type:</Text><br /><Text>{selectedVehicle.vehicleType || 'N/A'}</Text></Col>
+          <Col span={12}><Text strong>Status:</Text><br />{getStatusTag(selectedVehicle.status)}</Col>
+        </Row>
+      </Card>
+    );
   };
 
   const renderPassengersItemsSection = () => {
@@ -179,13 +260,13 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
     }
 
     switch (transportType) {
-      case 'WORKER':
+      case 'WORKER_TRANSPORT':
         return (
           <Spin spinning={loadingWorkers}>
             <Form.Item 
-              name={['additional_data', 'workers']} 
+              name={['additionalData', 'workers']} 
               label="Select Workers"
-              rules={transportType === 'WORKER' ? [{ required: true, message: 'Please select workers' }] : []}
+              rules={transportType === 'WORKER_TRANSPORT' ? [{ required: true, message: 'Please select workers' }] : []}
             >
               <Select 
                 mode="multiple" 
@@ -194,21 +275,34 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
                 optionFilterProp="children"
                 loading={loadingWorkers}
                 disabled={!selectedCompany}
+                filterOption={(input, option) =>
+                  option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                }
               >
                 {workers.map(worker => (
                   <Option key={worker.id} value={worker.id}>
-                    {worker.name} - {worker.role || worker.department || 'Worker'}
+                    {worker.fullName} - {worker.employeeCode} ({worker.jobTitle})
                   </Option>
                 ))}
               </Select>
             </Form.Item>
+            
+            {workers.length === 0 && !loadingWorkers && (
+              <Alert 
+                message="No workers found" 
+                description="No active workers found for the selected company."
+                type="info" 
+                showIcon 
+                className="mt-2"
+              />
+            )}
           </Spin>
         );
 
-      case 'MATERIAL':
+      case 'MATERIAL_TRANSPORT':
         return (
           <Spin spinning={loadingMaterials}>
-            <Form.List name={['additional_data', 'materialQuantities']}>
+            <Form.List name={['additionalData', 'materialQuantities']}>
               {(fields, { add, remove }) => (
                 <div>
                   <div className="flex justify-between items-center mb-3">
@@ -232,14 +326,17 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
                         className="flex-1"
                       >
                         <Select 
-                          placeholder="Select material" 
+                          placeholder="Select material from Materials collection" 
                           showSearch
                           optionFilterProp="children"
                           loading={loadingMaterials}
+                          filterOption={(input, option) =>
+                            option.children.toLowerCase().includes(input.toLowerCase())
+                          }
                         >
                           {materials.map(material => (
-                            <Option key={material.id} value={material.id}>
-                              {material.name} ({material.unit || 'units'})
+                            <Option key={material.id || material.id} value={material.id }>
+                              {material.name} ({material.unit || 'N/A'})
                             </Option>
                           ))}
                         </Select>
@@ -264,16 +361,26 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
                       No materials added. Click "Add Material" to start.
                     </div>
                   )}
+                  
+                  {materials.length === 0 && !loadingMaterials && (
+                    <Alert 
+                      message="No materials found in database" 
+                      description="No materials available in Materials collection."
+                      type="warning" 
+                      showIcon 
+                      className="mt-2"
+                    />
+                  )}
                 </div>
               )}
             </Form.List>
           </Spin>
         );
 
-      case 'TOOL':
+      case 'TOOL_TRANSPORT':
         return (
           <Spin spinning={loadingTools}>
-            <Form.List name={['additional_data', 'toolQuantities']}>
+            <Form.List name={['additionalData', 'toolQuantities']}>
               {(fields, { add, remove }) => (
                 <div>
                   <div className="flex justify-between items-center mb-3">
@@ -297,14 +404,17 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
                         className="flex-1"
                       >
                         <Select 
-                          placeholder="Select tool" 
+                          placeholder="Select tool from Tools collection" 
                           showSearch
                           optionFilterProp="children"
                           loading={loadingTools}
+                          filterOption={(input, option) =>
+                            option.children.toLowerCase().includes(input.toLowerCase())
+                          }
                         >
                           {tools.map(tool => (
-                            <Option key={tool.id} value={tool.id}>
-                              {tool.name} ({tool.toolType || 'Tool'})
+                            <Option key={tool.id || tool.id} value={tool.id }>
+                              {tool.name} ({tool.quantityAvailable || 0})
                             </Option>
                           ))}
                         </Select>
@@ -315,7 +425,11 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
                         rules={[{ required: true, message: 'Enter quantity' }]}
                         className="w-32"
                       >
-                        <InputNumber placeholder="Qty" min={1} style={{ width: '100%' }} />
+                        <InputNumber 
+                          placeholder="Qty" 
+                          min={1} 
+                          style={{ width: '100%' }} 
+                        />
                       </Form.Item>
                       <MinusCircleOutlined 
                         onClick={() => remove(field.name)} 
@@ -328,6 +442,16 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
                     <div className="text-gray-500 text-center py-4">
                       No tools added. Click "Add Tool" to start.
                     </div>
+                  )}
+                  
+                  {tools.length === 0 && !loadingTools && (
+                    <Alert 
+                      message="No tools found in database" 
+                      description="No tools available in Tools collection."
+                      type="warning" 
+                      showIcon 
+                      className="mt-2"
+                    />
                   )}
                 </div>
               )}
@@ -359,7 +483,7 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Driver Selection */}
         <Form.Item 
-          name={['additional_data', 'driverId']} 
+          name={['additionalData', 'driverId']} 
           label="Driver"
           rules={[{ required: true, message: 'Please select a driver' }]}
         >
@@ -380,7 +504,7 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
 
         {/* Vehicle Selection */}
         <Form.Item 
-          name={['additional_data', 'vehicleId']} 
+          name={['additionalData', 'vehicleId']} 
           label="Vehicle"
           rules={[{ required: true, message: 'Please select a vehicle' }]}
         >
@@ -390,10 +514,17 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
             optionFilterProp="children"
             loading={loadingVehicles}
             disabled={!selectedCompany}
+            onChange={handleVehicleChange}
           >
             {vehicles.map(vehicle => (
               <Option key={vehicle.id} value={vehicle.id}>
-                {vehicle.registrationNo} - {vehicle.vehicleType} ({vehicle.vehicleCode})
+                <Space>
+                  <CarOutlined />
+                  <span>{vehicle.registrationNo}</span>
+                  <span>-</span>
+                  <span>{vehicle.vehicleType}</span>
+                  {getStatusTag(vehicle.status)}
+                </Space>
               </Option>
             ))}
           </Select>
@@ -401,7 +532,7 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
 
         {/* Transport Type */}
         <Form.Item 
-          name={['additional_data', 'transportType']} 
+          name={['additionalData', 'transportType']} 
           label="Transport Type"
           rules={[{ required: true, message: 'Please select transport type' }]}
         >
@@ -410,15 +541,30 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
             onChange={setTransportType}
             disabled={!selectedCompany}
           >
-            <Option value="WORKER">Worker Transport</Option>
-            <Option value="MATERIAL">Material Transport</Option>
-            <Option value="TOOL">Tool Transport</Option>
+            <Option value="WORKER_TRANSPORT">
+              <Space>
+                <TeamOutlined />
+                <span>WORKER TRANSPORT</span>
+              </Space>
+            </Option>
+            <Option value="MATERIAL_TRANSPORT">
+              <Space>
+                <ToolOutlined />
+                <span>MATERIAL TRANSPORT</span>
+              </Space>
+            </Option>
+            <Option value="TOOL_TRANSPORT">
+              <Space>
+                <ToolOutlined />
+                <span>TOOL TRANSPORT</span>
+              </Space>
+            </Option>
           </Select>
         </Form.Item>
 
         {/* Pickup Location */}
         <Form.Item 
-          name={['additional_data', 'pickupLocation']} 
+          name={['additionalData', 'pickupLocation']} 
           label="Pickup Location"
           rules={[{ required: true, message: 'Please enter pickup location' }]}
         >
@@ -427,7 +573,7 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
 
         {/* Drop Location */}
         <Form.Item 
-          name={['additional_data', 'dropLocation']} 
+          name={['additionalData', 'dropLocation']} 
           label="Drop Location"
           rules={[{ required: true, message: 'Please enter drop location' }]}
         >
@@ -436,7 +582,7 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
 
         {/* Pickup Time */}
         <Form.Item 
-          name={['additional_data', 'pickupTime']} 
+          name={['additionalData', 'pickupTime']} 
           label="Pickup Time"
           rules={[{ required: true, message: 'Please select pickup time' }]}
         >
@@ -450,7 +596,7 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
 
         {/* Drop Time */}
         <Form.Item 
-          name={['additional_data', 'dropTime']} 
+          name={['additionalData', 'dropTime']} 
           label="Drop Time"
           rules={[{ required: true, message: 'Please select drop time' }]}
         >
@@ -463,13 +609,16 @@ const TransportTaskForm = ({ form, selectedCompany }) => {
         </Form.Item>
       </div>
 
+      {/* Selected Vehicle Details */}
+      {selectedVehicle && renderVehicleInfo()}
+
       {/* Passengers / Items Section */}
       <Divider>Passengers / Items</Divider>
       {renderPassengersItemsSection()}
 
       {/* Remarks */}
       <Form.Item 
-        name={['additional_data', 'remarks']} 
+        name={['additionalData', 'remarks']} 
         label="Remarks"
         className="mt-4"
       >

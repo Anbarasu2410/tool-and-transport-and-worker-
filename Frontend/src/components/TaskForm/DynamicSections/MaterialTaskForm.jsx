@@ -7,7 +7,7 @@ const MaterialTaskForm = ({ form }) => (
   <Card title="🏗️ Material Task Details" size="small" className="mb-4">
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Form.Item 
-        name={['additional_data', 'materialType']} 
+        name={['additionalData', 'materialType']} 
         label="Material Type"
       >
         <Select placeholder="Select material type">
@@ -20,7 +20,7 @@ const MaterialTaskForm = ({ form }) => (
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'quantity']} 
+        name={['additionalData', 'quantity']} 
         label="Quantity"
       >
         <InputNumber 
@@ -31,14 +31,14 @@ const MaterialTaskForm = ({ form }) => (
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'unit']} 
+        name={['additionalData', 'unit']} 
         label="Unit"
       >
         <Input placeholder="e.g., kg, pieces, boxes" />
       </Form.Item>
 
       <Form.Item 
-        name={['additional_data', 'supplier']} 
+        name={['additionalData', 'supplier']} 
         label="Supplier"
       >
         <Input placeholder="Enter supplier name" />

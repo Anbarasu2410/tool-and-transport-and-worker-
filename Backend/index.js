@@ -14,6 +14,11 @@ import fleetAlertRoutes from './routes/fleetAlertRoutes.js';
 import driverRoutes from './routes/driverRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
 import taskRoutes from './routes/taskRoutes.js';
+import toolRoutes from './routes/toolRoute.js';
+import materialRoutes from './routes/materialRoutes.js';
+//import fleetTaskToolRoutes from './routes/fleetTaskTools.js';
+//import fleetTaskMaterialRoutes from './routes/fleetTaskMaterials.js';
+
 
 dotenv.config();
 
@@ -38,6 +43,11 @@ app.use('/api/fleet-alerts', fleetAlertRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/tools', toolRoutes);
+app.use('/api/materials', materialRoutes);
+//app.use('/api/fleet-task-tools', fleetTaskToolRoutes);
+//app.use('/api/fleet-task-materials', fleetTaskMaterialRoutes);
+
 
 // Basic route
 app.get('/', (req, res) => {

@@ -32,7 +32,7 @@ const TaskForm = ({
         endDate: values.dateRange?.[1]?.format('YYYY-MM-DD'),
         status: 'PLANNED',
         companyId: 1,
-        additionalData: values.additional_data || {}
+        additionalData: values.additionalData || {}
       };
 
       console.log('Submitting task data:', taskData);
@@ -77,7 +77,7 @@ const TaskForm = ({
           selectedTask.endDate ? dayjs(selectedTask.endDate) : null
         ],
         notes: selectedTask.notes,
-        additional_data: selectedTask.additionalData || {}
+        additionalData: selectedTask.additionalData || {}
       });
       setTaskType(selectedTask.taskType);
     }
